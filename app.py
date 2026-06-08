@@ -8,7 +8,9 @@ import cartopy.feature as cfeature
 from geopy.geocoders import Nominatim
 import matplotlib.dates as mdates
 
-# Configuración profesional de la plataforma web
+# =====================================================================
+# CONFIGURACIÓN PROFESIONAL DE LA PLATAFORMA WEB
+# =====================================================================
 st.set_page_config(
     page_title="Iono-Explorer Pro GNSS",
     page_icon="🛰️",
@@ -16,12 +18,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilo CSS personalizado para adaptar la web al modo oscuro científico
+# INTERFAZ FORMAL: Deep Space Command (Negro Absoluto y Azul)
 st.markdown("""
     <style>
-    .main { background-color: #0f172a; color: #f8fafc; }
-    .stHeading h1, .stHeading h2, .stHeading h3 { color: #deff9a !important; }
-    div[data-testid="stMetricValue"] { color: #4ade80 !important; }
+    /* Fondo de la página principal y textos */
+    .main { background-color: #000000; color: #cbd5e1; }
+    
+    /* Títulos en Azul Aeroespacial */
+    .stHeading h1, .stHeading h2, .stHeading h3 { color: #3b82f6 !important; }
+    
+    /* Barra lateral estilizada en gris oscuro/negro */
+    section[data-testid="stSidebar"] { background-color: #050505 !important; border-right: 1px solid #1e3a8a; }
+    section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] label { color: #94a3b8 !important; }
+    
+    /* Métricas (Números en Cian de Alta Visibilidad) */
+    div[data-testid="stMetricValue"] { color: #06b6d4 !important; font-family: monospace; }
+    div[data-testid="stMetricLabel"] { color: #94a3b8 !important; }
+    
+    /* Personalización de Botones de Comando */
+    .stButton>button {
+        background-color: #1e3a8a;
+        color: #ffffff;
+        border-radius: 6px;
+        border: 1px solid #3b82f6;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background-color: #2563eb;
+        border-color: #60a5fa;
+        color: #ffffff;
+    }
+    
+    /* Alertas y avisos */
+    .stAlert { background-color: #0b1329 !important; color: #60a5fa !important; border: 1px solid #1e3a8a !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -42,7 +72,6 @@ def generar_enlace_dlr(fecha):
 @st.cache_data(show_spinner=False, ttl=3600)
 def descargar_json_dlr(fecha):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    # Escaneo riguroso por minutos contiguos para asegurar datos reales válidos
     for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]:
         f_intento = fecha.replace(minute=m)
         url = generar_enlace_dlr(f_intento)
@@ -50,11 +79,11 @@ def descargar_json_dlr(fecha):
             r = requests.get(url, headers=headers, timeout=4)
             if r.status_code == 200:
                 data = r.json()
-                # COMPROBACIÓN CRÍTICA: Validar estructura y contenido real
+                # COMPROBACIÓN CRÍTICA: Validar que el archivo contenga datos reales del DLR
                 if 'data' in data and 'grid' in data['data'] and 'features' in data['data']['grid']:
                     vtec_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                     
-                    # Filtro anti-mallas falsas o corruptas (Malla Europa Versión A requiere 43x81 = 3483 puntos)
+                    # Filtro anti-mallas falsas (Malla Europa requiere 43x81 = 3483 puntos exactos)
                     if len(vtec_list) == 3483: 
                         return np.array(vtec_list).reshape(43, 81), f_intento
         except: 
@@ -62,13 +91,13 @@ def descargar_json_dlr(fecha):
     return None, None
 
 # =====================================================================
-# INTERFAZ DE USUARIO (SIDEBAR MULTI-OPCIÓN)
+# INTERFAZ DE USUARIO (SIDEBAR DE CONTROL)
 # =====================================================================
-st.sidebar.title("🛰️ Iono-Explorer Pro")
+st.sidebar.title("🛰️ Control Operacional")
 st.sidebar.markdown("---")
 
 version_seleccionada = st.sidebar.selectbox(
-    "Selecciona la Herramienta Web",
+    "Selecciona la Herramienta",
     ["1. Versión por Horas (Mapas 24h)", "2. Versión Matemática (Predicción vs Realidad)", "3. Versión por Constelaciones (Error Local)"]
 )
 
@@ -80,7 +109,7 @@ lats_vector = np.arange(30, 73, 1)
 lons_vector = np.arange(-30, 51, 1)
 grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-geolocator = Nominatim(user_agent="iono_explorer_pro_web_app_v3")
+geolocator = Nominatim(user_agent="iono_explorer_pro_command_v4")
 try:
     location = geolocator.geocode(ciudad_user, timeout=10)
 except:
@@ -91,10 +120,10 @@ if location:
     lon_idx = (np.abs(lons_vector - location.longitude)).argmin()
     st.sidebar.success(f"Malla: Lat {lats_vector[lat_idx]}°N | Lon {lons_vector[lon_idx]}°E")
 else:
-    # Backup estático automático para Madrid en caso de fallo de geolocalización externa
+    # Coordenadas de respaldo para asegurar continuidad operacional (Madrid)
     lat_idx = (np.abs(lats_vector - 40.4167)).argmin()
     lon_idx = (np.abs(lons_vector - -3.7037)).argmin()
-    st.sidebar.warning("⚠️ Usando coordenadas por defecto (Madrid) por latencia del buscador.")
+    st.sidebar.warning("⚠️ Modo seguro: Forzando coordenadas de respaldo (Madrid).")
     location = True 
 
 st.sidebar.markdown("---")
@@ -104,26 +133,26 @@ fecha_user = st.sidebar.date_input("Fecha Base de Estudio", datetime.date(2026, 
 FREQS_GNSS = {"GPS": 1575.42 * 1e6, "Galileo": 1575.42 * 1e6, "GLONASS": 1602.00 * 1e6, "BeiDou": 1561.10 * 1e6}
 
 # =====================================================================
-# ÁREA DE RENDERIZADO PRINCIPAL
+# ÁREA PRINCIPAL DE PRESENTACIÓN DE DATOS
 # =====================================================================
-st.title("📊 Panel de Control e Impacto Ionosférico GNSS")
-st.markdown("Auditoría espacial y matemática con datos validados del Centro Aeroespacial Alemán (DLR).")
+st.title("🖥️ Iono-Explorer Pro: Terminal de Auditoría Atmosférica")
+st.markdown("Plataforma analítica de refracción ionosférica para sistemas globales de navegación.")
 
 if not location:
-    st.warning("⚠️ Introduce una ciudad válida en la barra lateral para activar el motor de cálculo.")
+    st.warning("⚠️ Introduce una ciudad válida en la barra lateral para inicializar el sistema.")
 else:
     # -----------------------------------------------------------------
-    # HERRAMIENTA 1: VERSIÓN POR HORAS (MAPAS DINÁMICOS)
+    # HERRAMIENTA 1: VERSIÓN POR HORAS (MAPAS DE RETRASO EN METROS)
     # -----------------------------------------------------------------
     if version_seleccionada == "1. Versión por Horas (Mapas 24h)":
-        st.header("🗺️ Análisis Espacial de Retraso de Grupo (24 Horas)")
-        hora_mapa = st.slider("Selecciona la Hora de Observación (UTC)", 0, 23, 13)
-        constelacion_select = st.selectbox("Selecciona Constelación para evaluar el mapa en Metros", ["GPS", "Galileo", "GLONASS", "BeiDou"])
+        st.header("🗺️ Distribución Espacial del Retraso de Grupo (Europa)")
+        hora_mapa = st.slider("Hora de Observación (UTC)", 0, 23, 13)
+        constelacion_select = st.selectbox("Evaluar Mapa en Metros para la señal de:", ["GPS", "Galileo", "GLONASS", "BeiDou"])
         
         f_c = FREQS_GNSS[constelacion_select]
         factor_m = (40.3 / (f_c ** 2)) * 1e16
         
-        with st.spinner("Procesando mapas horarios reales..."):
+        with st.spinner("Descargando matriz y proyectando espacio métrico..."):
             fecha_h = datetime.datetime.combine(fecha_user, datetime.time(hora_mapa, 0))
             matriz_tecu, _ = descargar_json_dlr(fecha_h)
             
@@ -133,43 +162,54 @@ else:
                 v_max = float(np.ceil(np.max(matriz_metros) + 0.5))
                 
                 try:
-                    fig, ax = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    # Configuración de mapa estilo panel oscuro de control
+                    fig, ax = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100, facecolor='#000000')
+                    ax.set_facecolor('#000000')
                     ax.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-                    ax.add_feature(cfeature.LAND, facecolor='#1e293b', zorder=1)
-                    ax.add_feature(cfeature.OCEAN, facecolor='#0f172a', zorder=1)
-                    ax.add_feature(cfeature.COASTLINE, edgecolor='#f8fafc', linewidth=1, zorder=3)
                     
-                    gl = ax.gridlines(draw_labels=True, color='gray', alpha=0.1, linestyle='--')
+                    ax.add_feature(cfeature.LAND, facecolor='#0a0a0a', zorder=1)
+                    ax.add_feature(cfeature.OCEAN, facecolor='#020205', zorder=1)
+                    ax.add_feature(cfeature.COASTLINE, edgecolor='#1e3a8a', linewidth=0.8, zorder=3)
+                    
+                    gl = ax.gridlines(draw_labels=True, color='#1e3a8a', alpha=0.15, linestyle='--')
                     gl.top_labels, gl.right_labels = False, False
+                    gl.xlabel_style, gl.ylabel_style = {'color': '#3b82f6'}, {'color': '#3b82f6'}
                     
                     mesh = ax.pcolormesh(grid_lon, grid_lat, matriz_metros, transform=ccrs.PlateCarree(),
-                                         cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+                                         cmap='jet', alpha=0.8, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+                    
                     cbar = fig.colorbar(mesh, ax=ax, shrink=0.7, pad=0.03)
-                    cbar.set_label(f"Retraso de Grupo estimado para {constelacion_select} (Metros)")
+                    cbar.set_label(f"Retraso de la Onda (Metros)", color='#3b82f6', weight='bold')
+                    cbar.ax.tick_params(labelscolor='#3b82f6')
+                    
                     st.pyplot(fig)
                 except Exception:
-                    st.info("ℹ️ Renderizando en modo seguro de alta velocidad (sin mapa de fondo por restricciones del host).")
-                    fig, ax = plt.subplots(figsize=(10, 5))
+                    # Modo seguro en negro absoluto si Cartopy no compila en el host
+                    fig, ax = plt.subplots(figsize=(10, 5), facecolor='#000000')
+                    ax.set_facecolor('#000000')
                     mesh = ax.pcolormesh(grid_lon, grid_lat, matriz_metros, cmap='jet', shading='gouraud', vmin=v_min, vmax=v_max)
                     cbar = fig.colorbar(mesh, ax=ax, shrink=0.7)
+                    cbar.set_label("Retraso (Metros)", color='#3b82f6')
+                    cbar.ax.tick_params(labelscolor='#3b82f6')
+                    ax.tick_params(colors='#3b82f6')
                     st.pyplot(fig)
                 
                 c1, c2 = st.columns(2)
-                c1.metric(f"Peor Retraso en Europa ({constelacion_select})", f"{np.max(matriz_metros):.2f} metros")
-                c2.metric(f"Retraso estimado en tu coordenada", f"{matriz_metros[lat_idx, lon_idx]:.2f} metros")
+                c1.metric(f"Máximo Retraso en Europa ({constelacion_select})", f"{np.max(matriz_metros):.2f} metros")
+                c2.metric(f"Impacto Estimado en tu Localidad", f"{matriz_metros[lat_idx, lon_idx]:.2f} metros")
             else:
-                st.error("Datos reales no disponibles para este bloque horario en el servidor del DLR.")
+                st.error("Enlaces del DLR no disponibles o corruptos para este bloque horario.")
 
     # -----------------------------------------------------------------
-    # HERRAMIENTA 2: VERSIÓN MATEMÁTICA (PREDICCIÓN VS REALIDAD CORREGIDA)
+    # HERRAMIENTA 2: VERSIÓN MATEMÁTICA (PREDICCIÓN REAL VS REALIDAD)
     # -----------------------------------------------------------------
     elif version_seleccionada == "2. Versión Matemática (Predicción vs Realidad)":
-        st.header(f"📈 Auditoría de Predicción Matemática vs. Realidad: {ciudad_user}")
-        rango_dias = st.slider("Días del pasado para entrenamiento del modelo", 5, 15, 7)
-        st.info("El sistema entrenará el algoritmo con el pasado y descargará los links reales de las siguientes 6 horas para medir el error exacto del modelo.")
+        st.header(f"📈 Auditoría de Tendencia y Comprobación de Enlaces")
+        rango_dias = st.slider("Ventana de días para el entrenamiento de la serie", 5, 15, 7)
+        st.info("El sistema entrenará las ecuaciones de persistencia estacional y contrastará los resultados abriendo los links reales de las siguientes 6 horas.")
         
-        if st.button("🧠 Ejecutar Comparativa Rigurosa"):
-            with st.spinner("1/2: Recolectando serie histórica real certificada..."):
+        if st.button("🧠 Iniciar Auditoría de Enlaces"):
+            with st.spinner("Ejecutando escáner de red bihorario..."):
                 cronologia_tecu = []
                 fechas_list = []
                 
@@ -187,7 +227,7 @@ else:
                 if len(cronologia_tecu) > 24:
                     vector_serie = np.array(cronologia_tecu)
                     
-                    # Algoritmo de Inercia Estacional (Predicción)
+                    # Modelo Matemático Autorregresivo Estacional
                     periodo = 12
                     perfil_estacional = np.zeros(periodo)
                     for i in range(periodo):
@@ -200,14 +240,13 @@ else:
                     predicciones_futuras = []
                     fechas_futuras = []
                     alpha = 0.85
-                    for k in range(1, 4): # Próximas 6 horas (Pasos de 2h)
+                    for k in range(1, 4):
                         slot_futuro = (ultimo_slot + k) % periodo
                         val_pred = perfil_estacional[slot_futuro] + anomalia * (alpha ** k)
                         predicciones_futuras.append(val_pred)
                         fechas_futuras.append(fechas_list[-1] + datetime.timedelta(hours=k*2))
                     
-                    # EXTRA NUEVO: DESCARGAR Y VERIFICAR LOS LINKS REALES DEL FUTURO/PRESENTE
-                    st.text("2/2: Verificando links del DLR para extraer la curva de la realidad...")
+                    # DESCARGA COMPLEMENTARIA: Extraer curvas reales para romper datos falsos
                     realidad_futura = []
                     fechas_reales_futuras = []
                     
@@ -217,46 +256,56 @@ else:
                             realidad_futura.append(m_real[lat_idx, lon_idx])
                             fechas_reales_futuras.append(f_fut)
                     
-                    # Renderizado de la gráfica comparativa
-                    fig, ax = plt.subplots(figsize=(11, 4.5))
-                    # Mostrar las últimas 24 horas del pasado
-                    ax.plot(fechas_list[-12:], vector_serie[-12:], color='#2979ff', linewidth=2, label="Pasado Real Registrado", marker='o')
-                    # Mostrar la curva matemática estimada
-                    ax.plot(fechas_futuras, predicciones_futuras, color='#ff3d00', linewidth=2.5, linestyle='--', label="Proyección Matemática (Modelo)", marker='x')
+                    # Construcción del Lienzo Formal (Negro y Azul)
+                    fig, ax = plt.subplots(figsize=(11, 4.5), facecolor='#000000')
+                    ax.set_facecolor('#000000')
                     
-                    # Si existen datos reales en esos links, pintamos la línea de la verdad para comparar
+                    # Curvas en gama de azules y blanco tecnológico
+                    ax.plot(fechas_list[-12:], vector_serie[-12:], color='#60a5fa', linewidth=2, label="Historial Real Verificado", marker='o')
+                    ax.plot(fechas_futuras, predicciones_futuras, color='#2563eb', linewidth=2.5, linestyle='--', label="Algoritmo Matemático (Modelo)", marker='x')
+                    
                     if realidad_futura:
-                        ax.plot(fechas_reales_futuras, realidad_futura, color='#00e676', linewidth=2.5, label="Realidad Absoluta (Datos DLR Verificados)", marker='s')
+                        ax.plot(fechas_reales_futuras, realidad_futura, color='#ffffff', linewidth=2.5, label="Validación Real (Datos del Servidor)", marker='s')
                         
-                    # Regla estricta +-2 para asegurar que no se corten las líneas
+                    # Configuración estricta del marco geométrico del gráfico
                     todos_los_valores = list(vector_serie[-12:]) + list(predicciones_futuras) + list(realidad_futura)
                     y_min = max(0.0, float(np.floor(min(todos_los_valores) - 2)))
                     y_max = float(np.ceil(max(todos_los_valores) + 2))
                     ax.set_ylim(y_min, y_max)
                     
-                    ax.grid(True, linestyle='--', alpha=0.3)
+                    # Configuración de colores de rejilla y fuentes de los ejes
+                    ax.tick_params(colors='#3b82f6', labelsize=9)
+                    ax.xaxis.label.set_color('#3b82f6')
+                    ax.yaxis.label.set_color('#3b82f6')
+                    ax.spines['bottom'].set_color('#1e3a8a')
+                    ax.spines['left'].set_color('#1e3a8a')
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+                    ax.grid(True, linestyle='--', alpha=0.1, color='#3b82f6')
                     ax.set_ylabel("Densidad de Electrones (TECU)", weight='bold')
-                    ax.set_title(f"Auditoría del Modelo: Predicción vs Realidad en {ciudad_user.upper()}", weight='bold')
-                    ax.legend()
+                    
+                    legend = ax.legend(facecolor='#000000', edgecolor='#1e3a8a')
+                    for text in legend.get_texts():
+                        text.set_color('#60a5fa')
+                        
                     st.pyplot(fig)
                     
-                    # Cuadro de mandos estadístico del error
                     if len(realidad_futura) == len(predicciones_futuras):
                         error_medio = np.mean(np.abs(np.array(realidad_futura) - np.array(predicciones_futuras)))
-                        st.success(f"🎯 Comparativa completada. El error medio absoluto del modelo en esta ventana fue de **{error_medio:.3f} TECU**.")
+                        st.success(f"🎯 Análisis de desviación cerrado. El error absoluto medio del algoritmo fue de: **{error_medio:.3f} TECU**.")
                     else:
-                        st.warning("⚠️ Gráfica generada parcialmente. Algunos links futuros del DLR aún no han sido publicados en el servidor en tiempo real (Clima espacial en curso).")
+                        st.warning("⚠️ Operación parcial: Los últimos enlaces del futuro en tiempo real aún no han sido liberados por el DLR.")
                 else:
-                    st.error("No se pudieron recopilar suficientes enlaces reales limpios para inicializar el algoritmo.")
+                    st.error("Fallo de red: No se detectaron suficientes mallas reales válidas para computar la serie.")
 
     # -----------------------------------------------------------------
-    # HERRAMIENTA 3: VERSIÓN POR CONSTELACIONES (COMPARATIVA DE METROS)
+    # HERRAMIENTA 3: VERSIÓN POR CONSTELACIONES (ESPECTRO MULTI-FRECUENCIA)
     # -----------------------------------------------------------------
     elif version_seleccionada == "3. Versión por Constelaciones (Error)":
-        st.header(f"📡 Comparativa Multi-Constelación Absoluta")
-        st.markdown("Se evalúan simultáneamente las 4 bandas L1 principales libres de falsificaciones de datos.")
+        st.header(f"📡 Desviación Métrica de Pseudodistancia en {ciudad_user}")
+        st.markdown("Comparación absoluta directa del error inducido en las bandas portadoras primarias.")
         
-        with st.spinner("Calculando retrasos de grupo por frecuencia..."):
+        with st.spinner("Calculando desfasajes bihorarios..."):
             perfiles_tecu_24h = []
             horas_validas = []
             
@@ -269,8 +318,12 @@ else:
             
             if perfiles_tecu_24h:
                 vector_tecu = np.array(perfiles_tecu_24h)
-                fig, ax = plt.subplots(figsize=(11, 5))
-                colores = {"GLONASS": "#0d47a1", "GPS": "#00c853", "Galileo": "#ffd600", "BeiDou": "#d50000"}
+                
+                fig, ax = plt.subplots(figsize=(11, 5), facecolor='#000000')
+                ax.set_facecolor('#000000')
+                
+                # Paleta técnica de alto contraste sobre fondo negro
+                colores = {"GLONASS": "#3b82f6", "GPS": "#06b6d4", "Galileo": "#ffffff", "BeiDou": "#ef4444"}
                 estilos = {"GLONASS": "-", "GPS": "-", "Galileo": "--", "BeiDou": "-"}
                 
                 todos_los_metros = []
@@ -285,10 +338,23 @@ else:
                             label=f"{name_const} ({f_const/1e6:.1f} MHz)", marker='o')
                 
                 ax.set_ylim(max(0.0, float(np.floor(min(todos_los_metros) - 0.5))), float(np.ceil(max(todos_los_metros) + 0.5)))
-                ax.grid(True, linestyle='--', alpha=0.3)
-                ax.set_ylabel("Retraso de Grupo en Pseudodistancia (Metros)", weight='bold')
-                ax.set_xlabel("Hora del Día (UTC)", weight='bold')
-                ax.legend()
+                
+                ax.tick_params(colors='#3b82f6', labelsize=9)
+                ax.xaxis.label.set_color('#3b82f6')
+                ax.yaxis.label.set_color('#3b82f6')
+                ax.spines['bottom'].set_color('#1e3a8a')
+                ax.spines['left'].set_color('#1e3a8a')
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.grid(True, linestyle='--', alpha=0.1, color='#3b82f6')
+                
+                ax.set_ylabel("Retraso en Metros", weight='bold')
+                ax.set_xlabel("Hora de Observación (UTC)", weight='bold')
+                
+                legend = ax.legend(facecolor='#000000', edgecolor='#1e3a8a')
+                for text in legend.get_texts():
+                    text.set_color('#60a5fa')
+                    
                 st.pyplot(fig)
             else:
-                st.error("Error al leer los links de la fecha seleccionada. Servidor no disponible.")
+                st.error("El servidor del DLR no devolvió datos limpios para esta fecha.")
