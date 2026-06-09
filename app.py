@@ -13,17 +13,18 @@ import streamlit as st
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
-# CONFIGURACIÓN GLOBAL (Accesible para todas las funciones y pestañas)
+# CONFIGURACIÓN GLOBAL
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
 # Definición global de las pestañas obligatorias
 tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU"])
 
-# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN CON RESPALDO LOCAL ANTI-BLOQUEOS
+# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN AMPLIADA A TODA LA MALLA COBIERTA
 def geocodificar_localidad(nombre_lugar):
     nombre_clean = nombre_lugar.strip().lower()
     
+    # Diccionario ampliado con puntos estratégicos dentro de los límites de la cuadrícula (-30 a 50 Lon, 30 a 72 Lat)
     ciudades_respaldo = {
         "madrid": (40.4167, -3.7037),
         "barcelona": (41.3851, 2.1734),
@@ -35,7 +36,14 @@ def geocodificar_localidad(nombre_lugar):
         "berlin": (52.5200, 13.4050),
         "roma": (41.9028, 12.4964),
         "londres": (51.5074, -0.1278),
-        "lisboa": (38.7223, -9.1393)
+        "lisboa": (38.7223, -9.1393),
+        # Localidades no europeas dentro de la malla geográfica del DLR:
+        "rabat": (34.0209, -6.8416),
+        "el cairo": (30.0444, 31.2357),
+        "tunez": (36.8065, 10.1815),
+        "argel": (36.7538, 3.0588),
+        "reikiavik": (64.1466, -21.9426),
+        "ankara": (39.9334, 32.8597)
     }
     
     if nombre_clean in ciudades_respaldo:
@@ -67,7 +75,7 @@ with tab1:
     La presencia de estos electrones libres interactúa de forma directa con las señales emitidas por sistemas globales de navegación por satélite (**GNSS**), tales como GPS, Galileo, GLONASS o BeiDou, causando los siguientes efectos principales:
     * **Retardo Ionosférico:** Desacelera la velocidad de grupo de la señal de radio (y acelera la fase), lo que se traduce en un error de distancia calculado por el receptor. 10 TECU equivalen a aproximadamente 1.6 metros de error de rango en la frecuencia L1.
     * **Cintilación Ionosférica:** Fluctuaciones rápidas en la amplitud y fase de la señal que pueden provocar la pérdida de enganche (loss-of-lock) del satélite por parte del receptor.
-    * **Variabilidad Espacio-Temporal:** Durante tormentas solares, el TEC aumenta drásticamente de forma impredecible, afectando la precisión de servicios de alta precisión (como RTK o navegación aérea guiada por satélite).
+    * **Variabilidad Espacio-Temporal:** Durante tormentas solares, el TEC aumenta drácticamente de forma impredecible, afectando la precisión de servicios de alta precisión (como RTK o navegación aérea guiada por satélite).
     """)
 
     st.divider()
@@ -128,7 +136,7 @@ with tab1:
                 punto_consulta = np.array([[lat, lon]])
                 if dentro_europa:
                     valor_tecu = float(interp_europa(punto_consulta)[0])
-                    fuente = "Malla Regional de Europa (Alta Precisión)"
+                    fuente = "Malla Regional (Alta Precisión - Res: 1°)"
                 else:
                     valor_tecu = float(interp_global(punto_consulta)[0])
                     fuente = "Malla Planetaria Global"
@@ -156,7 +164,7 @@ with tab1:
         map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
         
         cbar_eur = fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7)
-        cbar_eur.set_label('VTEC EUROPA (TECU)', weight='bold')
+        cbar_eur.set_label('VTEC MALLA REGIONAL (TECU)', weight='bold')
 
         ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
         ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
@@ -209,7 +217,7 @@ with tab2:
 
     url_pasado = generar_enlace_dlr_pasado(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    if st.button("🚀 Cargar Mapa Histórico de Europa"):
+    if st.button("🚀 Cargar Mapa Histórico"):
         headers = {"User-Agent": "Mozilla/5.0"}
         with st.spinner("Descargando base de datos histórica del DLR..."):
             try:
@@ -236,7 +244,7 @@ with tab2:
         st.markdown(f"### 🔍 Consulta de Localidad en el Pasado ({st.session_state.fecha_mapa})")
         
         with st.form("formulario_consulta_pasado"):
-            localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid")
+            localidad_p_usuario = st.text_input("Ingresa cualquier localidad dentro del recuadro del mapa:", "Madrid")
             boton_consultar_ciudad = st.form_submit_button("Calcular TECU")
 
         lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
@@ -244,6 +252,7 @@ with tab2:
         if boton_consultar_ciudad and localidad_p_usuario:
             lat_p, lon_p, nombre_completo_p = geocodificar_localidad(localidad_p_usuario)
             
+            # CORREGIDO: El filtro valida estrictamente los límites cartográficos
             if lat_p is not None and (30 <= lat_p <= 72) and (-30 <= lon_p <= 50):
                 interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
@@ -251,7 +260,7 @@ with tab2:
                 st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
                 st.caption(f"📍 Coordenadas utilizadas para el cálculo: {lat_p:.3f}°N, {lon_p:.3f}°E")
             else:
-                st.warning("La localidad indicada está fuera del rango de cobertura de Europa o no fue encontrada por el buscador.")
+                st.warning("La localidad indicada está fuera del área de cobertura de la malla (-30° a 50° Lon, 30° a 72° Lat) o no fue encontrada.")
 
         st.markdown("### 🗺️ Malla Regional de Europa Reconstruida")
         fig_p = plt.figure(figsize=(11, 6), dpi=100)
@@ -269,7 +278,7 @@ with tab2:
         grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
         mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
         
-        cbar_p = plt.colorbar(mapa_p, ax=ax_p, orientation='vertical', pad=0.02, shrink=0.8)
+        cbar_p = plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7)
         cbar_p.set_label('VTEC ASSIMILATED (TECU)', weight='bold')
         
         plt.title(f"MAPA DE TEC RECONSTRUIDO\nFECHA: {st.session_state.fecha_mapa}", fontsize=11, weight='bold')
@@ -284,7 +293,7 @@ with tab3:
     modo_evolucion = st.radio("Selecciona el tipo de análisis temporal:", ["Por Días", "Por Horas"], horizontal=True)
 
     # -----------------------------------------------------------------
-    # MÓDULO: POR DÍAS (SÓLIDO V2.0)
+    # MÓDULO: POR DÍAS
     # -----------------------------------------------------------------
     if modo_evolucion == "Por Días":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
@@ -368,7 +377,7 @@ with tab3:
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
-            fig_max, ax_mx = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -378,7 +387,8 @@ with tab3:
 
             mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, 
                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='vertical', pad=0.02, shrink=0.8).set_label('PICO MÁXIMO (TECU)', weight='bold')
+            
+            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             ax_mx.set_title("Distribución de Intensidades Máximas Observadas", weight='bold')
             st.pyplot(fig_max)
             plt.close(fig_max)
@@ -386,14 +396,14 @@ with tab3:
             st.divider()
 
             st.subheader("🎬 Reproductor de Video: Evolución Diaria del TEC (0.5s por Frame)")
-            col_b1, col_b2, _ = st.columns([1, 1, 4])
+            col_b1, _, _ = st.columns([1, 1, 4])
             play_video = col_b1.button("▶️ Reproducir Video", key="play_dias")
             contenedor_video_mapa = st.empty()
 
             if play_video:
                 num_frames = len(st.session_state.etiquetas_fechas_reales)
                 for f in range(num_frames):
-                    fig_video, ax_ev = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                     ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
                     ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -404,14 +414,15 @@ with tab3:
                     matriz_frame = st.session_state.historial_vtec_3d[f, :, :]
                     mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, matriz_frame, 
                                                      transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-                    fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                    
+                    fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                     ax_ev.set_title(f"Video en Curso ➔ Fecha: {st.session_state.etiquetas_fechas_reales[f]} UTC", weight='bold', color='#1976d2')
                     
                     contenedor_video_mapa.pyplot(fig_video)
                     plt.close(fig_video)
                     time.sleep(0.5)
             else:
-                fig_video, ax_ev = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                 ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                 ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
                 ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -421,7 +432,7 @@ with tab3:
                 
                 mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[0, :, :], 
                                                  transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-                fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                 ax_ev.set_title("Video Listo ➔ Presiona Play para iniciar la simulación", weight='bold')
                 contenedor_video_mapa.pyplot(fig_video)
                 plt.close(fig_video)
@@ -430,17 +441,18 @@ with tab3:
 
             st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas")
             with st.form("formulario_acumulador_ciudades"):
-                nueva_ciudad = st.text_input("Nombre de la ciudad a añadir al gráfico histórico (Ej: madrid, barcelona):", "madrid")
-                boton_agregar = st.form_submit_button("➕ Añadir Ciudad al Análisis")
+                nueva_ciudad = st.text_input("Ingresa cualquier localidad del mapa para agregarla a la gráfica:", "madrid")
+                boton_agregar = st.form_submit_button("➕ Añadir Localidad")
 
             if boton_agregar and nueva_ciudad:
                 lat_c, lon_c, _ = geocodificar_localidad(nueva_ciudad)
+                # CORREGIDO: Malla libre de rango para admitir cualquier punto geográfico analizado
                 if lat_c is not None and (30 <= lat_c <= 72) and (-30 <= lon_c <= 50):
                     if nueva_ciudad.capitalize() not in [c['name'] for c in st.session_state.ciudades_lista]:
                         st.session_state.ciudades_lista.append({'name': nueva_ciudad.capitalize(), 'lat': lat_c, 'lon': lon_c})
                         st.success(f"Añadida {nueva_ciudad.capitalize()} al histórico.")
                 else:
-                    st.error("Ubicación no encontrada o fuera del área de cobertura de Europa.")
+                    st.error("Ubicación no encontrada o fuera del área cartográfica (-30° a 50° Lon, 30° a 72° Lat).")
 
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
@@ -460,12 +472,12 @@ with tab3:
                 st.pyplot(fig_lineas)
                 plt.close(fig_lineas)
                 
-                if st.button("🗑️ Limpiar todas las ciudades del gráfico", key="clear_dias"):
+                if st.button("🗑️ Limpiar todas las localidades", key="clear_dias"):
                     st.session_state.ciudades_lista = []
                     st.rerun()
 
     # -----------------------------------------------------------------
-    # MÓDULO: POR HORAS (SÓLIDO V3.0 - REORDENADO SIN NAMEERROR)
+    # MÓDULO: POR HORAS
     # -----------------------------------------------------------------
     elif modo_evolucion == "Por Horas":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
@@ -504,7 +516,6 @@ with tab3:
                 data = None
                 minuto_exitoso = 0
 
-                # CORRECCIÓN AQUÍ: Se llama a la lista global MINUTOS_CONTIGUOS_GLOBAL de forma segura
                 for m in MINUTOS_CONTIGUOS_GLOBAL:
                     url_intento = generar_enlace_dlr_horas(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
                     try:
@@ -548,7 +559,7 @@ with tab3:
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
-            fig_max_h, ax_mxh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
             ax_mxh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -558,7 +569,8 @@ with tab3:
 
             mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, 
                                                transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
-            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='vertical', pad=0.02, shrink=0.8).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
+            
+            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             ax_mxh.set_title(f"Intensidad Máxima Alcanzada por Coordenada en las 24h ({fecha_analisis_h.strftime('%d/%m/%Y')})", weight='bold')
             st.pyplot(fig_max_h)
             plt.close(fig_max_h)
@@ -572,7 +584,7 @@ with tab3:
 
             if play_video_h:
                 for f in range(24):
-                    fig_vid_h, ax_evh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    fig_vid_h, ax_evh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                     ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
                     ax_evh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -583,14 +595,15 @@ with tab3:
                     matriz_frame_h = st.session_state.h_historial_vtec_3d[f, :, :]
                     mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, matriz_frame_h, 
                                                         transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
-                    fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                    
+                    fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                     ax_evh.set_title(f"Video Horario ➔ Hora: {st.session_state.h_etiquetas_reales[f]} UTC", weight='bold', color='#1976d2')
                     
                     contenedor_video_horas.pyplot(fig_vid_h)
                     plt.close(fig_vid_h)
                     time.sleep(0.5)
             else:
-                fig_vid_h, ax_evh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                fig_vid_h, ax_evh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                 ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                 ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
                 ax_evh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -600,7 +613,7 @@ with tab3:
                 
                 mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[0, :, :], 
                                                     transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
-                fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                 ax_evh.set_title("Video Listo ➔ Presiona Play para iniciar la línea de tiempo horaria", weight='bold')
                 contenedor_video_horas.pyplot(fig_vid_h)
                 plt.close(fig_vid_h)
@@ -610,17 +623,18 @@ with tab3:
             # --- GRÁFICA COMPARATIVA ACUMULATIVA HORARIA ---
             st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             with st.form("formulario_acumulador_ciudades_horas"):
-                nueva_ciudad_h = st.text_input("Nombre de la ciudad a añadir al gráfico de 24h (Ej: madrid, barcelona):", "madrid")
-                boton_agregar_h = st.form_submit_button("➕ Añadir Ciudad al Análisis Horario")
+                nueva_ciudad_h = st.text_input("Ingresa cualquier localidad del mapa para el análisis de 24h:", "madrid")
+                boton_agregar_h = st.form_submit_button("➕ Añadir Localidad")
 
             if boton_agregar_h and nueva_ciudad_h:
                 lat_ch, lon_ch, _ = geocodificar_localidad(nueva_ciudad_h)
+                # CORREGIDO: Malla libre de rango horario
                 if lat_ch is not None and (30 <= lat_ch <= 72) and (-30 <= lon_ch <= 50):
                     if nueva_ciudad_h.capitalize() not in [c['name'] for c in st.session_state.h_ciudades_lista]:
                         st.session_state.h_ciudades_lista.append({'name': nueva_ciudad_h.capitalize(), 'lat': lat_ch, 'lon': lon_ch})
                         st.success(f"Añadida {nueva_ciudad_h.capitalize()} al análisis horario.")
                 else:
-                    st.error("Ubicación no encontrada o fuera del área de cobertura de Europa.")
+                    st.error("Ubicación no encontrada o fuera del área cartográfica (-30° a 50° Lon, 30° a 72° Lat).")
 
             if st.session_state.h_ciudades_lista:
                 fig_lineas_h, ax_lineas_h = plt.subplots(figsize=(12, 5))
@@ -641,6 +655,6 @@ with tab3:
                 st.pyplot(fig_lineas_h)
                 plt.close(fig_lineas_h)
                 
-                if st.button("🗑️ Limpiar todas las ciudades del gráfico", key="clear_horas"):
+                if st.button("🗑️ Limpiar todas las localidades", key="clear_horas"):
                     st.session_state.h_ciudades_lista = []
                     st.rerun()
