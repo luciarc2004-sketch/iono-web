@@ -13,8 +13,11 @@ import streamlit as st
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
-# CONFIGURACIÓN DE PESTAÑAS PRINCIPALES
+# CONFIGURACIÓN GLOBAL (Accesible para todas las funciones y pestañas)
 # =====================================================================
+MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+
+# Definición global de las pestañas obligatorias
 tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU"])
 
 # FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN CON RESPALDO LOCAL ANTI-BLOQUEOS
@@ -311,7 +314,6 @@ with tab3:
 
         if st.button("🚀 Procesar Rango de Días"):
             headers = {"User-Agent": "Mozilla/5.0"}
-            minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
             
             temp_etiquetas = []
             temp_3d = np.zeros((num_dias_sel, 43, 81))
@@ -322,9 +324,8 @@ with tab3:
                 fecha_actual = datetime.datetime(fecha_inicial.year, fecha_inicial.month, fecha_inicial.day) + datetime.timedelta(days=d)
                 link_exitoso = False
                 data = None
-                minuto_exitoso = 0
 
-                for m in minutes_contiguos:
+                for m in MINUTOS_CONTIGUOS_GLOBAL:
                     url_intento = generar_enlace_dlr_rango(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
@@ -429,7 +430,7 @@ with tab3:
 
             st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas")
             with st.form("formulario_acumulador_ciudades"):
-                nueva_ciudad = st.text_input("Nombre de la ciudad a añadir al gráfico histórico:", "madrid")
+                nueva_ciudad = st.text_input("Nombre de la ciudad a añadir al gráfico histórico (Ej: madrid, barcelona):", "madrid")
                 boton_agregar = st.form_submit_button("➕ Añadir Ciudad al Análisis")
 
             if boton_agregar and nueva_ciudad:
@@ -464,12 +465,11 @@ with tab3:
                     st.rerun()
 
     # -----------------------------------------------------------------
-    # MÓDULO: POR HORAS (NUEVO DESARROLLO VERSIÓN 3.0)
+    # MÓDULO: POR HORAS (SÓLIDO V3.0 - REORDENADO SIN NAMEERROR)
     # -----------------------------------------------------------------
     elif modo_evolucion == "Por Horas":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         
-        # Inicialización de estados de sesión para el entorno horario
         if 'h_historial_vtec_3d' not in st.session_state:
             st.session_state.h_historial_vtec_3d = None
             st.session_state.h_etiquetas_reales = []
@@ -477,7 +477,6 @@ with tab3:
             st.session_state.h_matriz_maximos = None
             st.session_state.h_ciudades_lista = []
 
-        # Selectores de fecha para análisis intradía
         col_h1, _ = st.columns([1, 2])
         fecha_analisis_h = col_h1.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
@@ -494,7 +493,6 @@ with tab3:
 
         if st.button("🚀 Procesar las 24 Horas"):
             headers = {"User-Agent": "Mozilla/5.0"}
-            minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
             
             h_temp_etiquetas = []
             h_temp_3d = np.zeros((24, 43, 81))
@@ -506,7 +504,8 @@ with tab3:
                 data = None
                 minuto_exitoso = 0
 
-                for m in minutes_contiguos:
+                # CORRECCIÓN AQUÍ: Se llama a la lista global MINUTOS_CONTIGUOS_GLOBAL de forma segura
+                for m in MINUTOS_CONTIGUOS_GLOBAL:
                     url_intento = generar_enlace_dlr_horas(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
@@ -519,7 +518,7 @@ with tab3:
                         pass
 
                 if not link_exitoso:
-                    st.error(f"❌ Error: Archivos no encontrados o caídos en el servidor DLR para la hora {h:02d}:00 UTC. Proceso cancelado.")
+                    st.error(f"❌ Error: Archivos no encontrados en el servidor DLR para la hora {h:02d}:00 UTC. Proceso cancelado.")
                     h_exito_total = False
                     break
 
@@ -548,7 +547,6 @@ with tab3:
             lats_vector = np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-            # --- MAPA DE MÁXIMOS HORARIOS FIJO ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
@@ -567,7 +565,6 @@ with tab3:
 
             st.divider()
 
-            # --- REPRODUCTOR HORARIO TIPO VIDEO (0.5s) ---
             st.subheader("🎬 Reproductor Horario: Evolución Intradía (0.5s por Frame)")
             col_bh1, _, _ = st.columns([1, 1, 4])
             play_video_h = col_bh1.button("▶️ Reproducir Video Horario", key="play_horas")
@@ -613,7 +610,7 @@ with tab3:
             # --- GRÁFICA COMPARATIVA ACUMULATIVA HORARIA ---
             st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             with st.form("formulario_acumulador_ciudades_horas"):
-                nueva_ciudad_h = st.text_input("Nombre de la ciudad a añadir al gráfico de 24h:", "Madrid")
+                nueva_ciudad_h = st.text_input("Nombre de la ciudad a añadir al gráfico de 24h (Ej: madrid, barcelona):", "madrid")
                 boton_agregar_h = st.form_submit_button("➕ Añadir Ciudad al Análisis Horario")
 
             if boton_agregar_h and nueva_ciudad_h:
