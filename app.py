@@ -40,7 +40,7 @@ with tab1:
     El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado). 
 
     La presencia de estos electrones libres interactúa de forma directa con las señales emitidas por sistemas globales de navegación por satélite (**GNSS**), tales como GPS, Galileo, GLONASS o BeiDou, causando los siguientes efectos principales:
-    * **Retardo Ionosférico:** Desacelera la velocidad de grupo de la señal de radio (y acelera la fase), lo que se traduce en un error de distancia calculado por el receptor. 10 TECU equivalen a aproximadamente 1.6 metros de error de rango en la frecuencia L1.
+    * **Retardo Ionosférico:** Desacelera la velocidad de grupo de la señal de radio (y acelera la phase), lo que se traduce en un error de distancia calculado por el receptor. 10 TECU equivalen a aproximadamente 1.6 metros de error de rango en la frecuencia L1.
     * **Cintilación Ionosférica:** Fluctuaciones rápidas en la amplitud y fase de la señal que pueden provocar la pérdida de enganche (loss-of-lock) del satélite por parte del receptor.
     * **Variabilidad Espacio-Temporal:** Durante tormentas solares, el TEC aumenta drásticamente de forma impredecible, afectando la precisión de servicios de alta precisión (como RTK o navegación aérea guiada por satélite).
     """)
@@ -151,7 +151,7 @@ with tab1:
         st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO 
+# PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
 with tab2:
     st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
@@ -206,15 +206,15 @@ with tab2:
             except Exception:
                 st.error(f"❌ No existen registros en el DLR para la fecha/hora {hora_sel:02d}:{minuto_ajustado:02d} del {fecha_sel.strftime('%d/%m/%Y')}.")
 
-    # SOLUCIÓN DE BUG DE STREAMLIT AQUÍ: Uso de un formulario dedicado para congelar variables
+    # CORRECCIÓN DEFINITIVA DEL BOTÓN DEL FORMULARIO AQUÍ
     if st.session_state.matriz_pasado is not None:
         st.divider()
         st.markdown(f"### 🔍 Consulta de Localidad en el Pasado ({st.session_state.fecha_mapa})")
         
-        # El formulario encapsula la interacción y evita que salte al 'else' erróneo
         with st.form("formulario_consulta_pasado"):
             localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid")
-            boton_consultar_ciudad = st.form_submit_with_button("Calcular TECU")
+            # LINEA CORREGIDA: Cambio de st.form_submit_with_button a st.form_submit_button
+            boton_consultar_ciudad = st.form_submit_button("Calcular TECU")
 
         lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
 
