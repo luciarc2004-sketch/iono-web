@@ -13,7 +13,7 @@ import streamlit as st
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
-# CONFIGURACIÓN DE PESTAÑAS PRINCIPALES (Definición global obligatoria)
+# CONFIGURACIÓN DE PESTAÑAS PRINCIPALES
 # =====================================================================
 tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU"])
 
@@ -278,8 +278,11 @@ with tab2:
 with tab3:
     st.title("📈 Estudio de Evolución Temporal del TECU")
     
-    modo_evolucion = st.radio("Selecciona el tipo de análisis temporal:", ["Por Días", "Por Horas (Próximamente)"], horizontal=True)
+    modo_evolucion = st.radio("Selecciona el tipo de análisis temporal:", ["Por Días", "Por Horas"], horizontal=True)
 
+    # -----------------------------------------------------------------
+    # MÓDULO: POR DÍAS (SÓLIDO V2.0)
+    # -----------------------------------------------------------------
     if modo_evolucion == "Por Días":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         
@@ -308,7 +311,6 @@ with tab3:
 
         if st.button("🚀 Procesar Rango de Días"):
             headers = {"User-Agent": "Mozilla/5.0"}
-            # CORRECCIÓN DE POSICIÓN: Se declara la lista de minutos antes del bucle de red para evitar el NameError
             minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
             
             temp_etiquetas = []
@@ -322,7 +324,7 @@ with tab3:
                 data = None
                 minuto_exitoso = 0
 
-                for m in minutos_contiguos:
+                for m in minutes_contiguos:
                     url_intento = generar_enlace_dlr_rango(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
@@ -364,7 +366,6 @@ with tab3:
             lats_vector = np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-            # --- MAPA DE MÁXIMOS FIJO ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
@@ -383,11 +384,9 @@ with tab3:
 
             st.divider()
 
-            # --- REPRODUCTOR TIPO VIDEO (0.5s) ---
             st.subheader("🎬 Reproductor de Video: Evolución Diaria del TEC (0.5s por Frame)")
             col_b1, col_b2, _ = st.columns([1, 1, 4])
-            play_video = col_b1.button("▶️ Reproducir Video")
-            
+            play_video = col_b1.button("▶️ Reproducir Video", key="play_dias")
             contenedor_video_mapa = st.empty()
 
             if play_video:
@@ -428,50 +427,223 @@ with tab3:
 
             st.divider()
 
-            # --- GRÁFICA COMPARATIVA ACUMULATIVA ---
             st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas")
-            
             with st.form("formulario_acumulador_ciudades"):
-                nueva_ciudad = st.text_input("Nombre de la ciudad a añadir al gráfico histórico (Ej: madrid, barcelona):", "madrid")
+                nueva_ciudad = st.text_input("Nombre de la ciudad a añadir al gráfico histórico:", "madrid")
                 boton_agregar = st.form_submit_button("➕ Añadir Ciudad al Análisis")
 
             if boton_agregar and nueva_ciudad:
                 lat_c, lon_c, _ = geocodificar_localidad(nueva_ciudad)
                 if lat_c is not None and (30 <= lat_c <= 72) and (-30 <= lon_c <= 50):
                     if nueva_ciudad.capitalize() not in [c['name'] for c in st.session_state.ciudades_lista]:
-                        st.session_state.ciudades_lista.append({
-                            'name': nueva_ciudad.capitalize(),
-                            'lat': lat_c,
-                            'lon': lon_c
-                        })
+                        st.session_state.ciudades_lista.append({'name': nueva_ciudad.capitalize(), 'lat': lat_c, 'lon': lon_c})
                         st.success(f"Añadida {nueva_ciudad.capitalize()} al histórico.")
                 else:
                     st.error("Ubicación no encontrada o fuera del área de cobertura de Europa.")
 
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
-                
                 for ciudad_obj in st.session_state.ciudades_lista:
                     idx_lat = (np.abs(lats_vector - ciudad_obj['lat'])).argmin()
                     idx_lon = (np.abs(lons_vector - ciudad_obj['lon'])).argmin()
                     perfil_temporal = st.session_state.historial_vtec_3d[:, idx_lat, idx_lon]
-                    
-                    ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), perfil_temporal, 
-                                   marker='s', linestyle='-', linewidth=2, label=ciudad_obj['name'])
+                    ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), perfil_temporal, marker='s', linestyle='-', linewidth=2, label=ciudad_obj['name'])
 
                 ax_lineas.grid(True, linestyle='--', alpha=0.6)
                 ax_lineas.set_ylim(v_min, v_max)
                 ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales)))
                 ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25)
                 ax_lineas.set_ylabel("VTEC (TECU)", weight='bold')
-                ax_lineas.set_xlabel("Muestras de la Línea Temporal (UTC)", weight='bold')
-                ax_lineas.set_title(f"Evolución Comparativa (Límites Eje Y: {int(v_min)}-{int(v_max)} TECU)", weight='bold')
+                ax_lineas.set_title(f"Evolución Comparativa (Eje Y: {int(v_min)}-{int(v_max)} TECU)", weight='bold')
                 ax_lineas.legend(loc="upper right")
                 st.pyplot(fig_lineas)
                 plt.close(fig_lineas)
                 
-                if st.button("🗑️ Limpiar todas las ciudades del gráfico"):
+                if st.button("🗑️ Limpiar todas las ciudades del gráfico", key="clear_dias"):
                     st.session_state.ciudades_lista = []
                     st.rerun()
-    else:
-        st.info("🛠️ El módulo de análisis continuo por horas se habilitará en las próximas versiones de desarrollo.")
+
+    # -----------------------------------------------------------------
+    # MÓDULO: POR HORAS (NUEVO DESARROLLO VERSIÓN 3.0)
+    # -----------------------------------------------------------------
+    elif modo_evolucion == "Por Horas":
+        st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
+        
+        # Inicialización de estados de sesión para el entorno horario
+        if 'h_historial_vtec_3d' not in st.session_state:
+            st.session_state.h_historial_vtec_3d = None
+            st.session_state.h_etiquetas_reales = []
+            st.session_state.h_limites_globales = (0, 15)
+            st.session_state.h_matriz_maximos = None
+            st.session_state.h_ciudades_lista = []
+
+        # Selectores de fecha para análisis intradía
+        col_h1, _ = st.columns([1, 2])
+        fecha_analisis_h = col_h1.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
+
+        def generar_enlace_dlr_horas(anio, mes, dia, hora, minuto):
+            fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
+            str_anio = fecha_fin.strftime("%Y")
+            str_doy = fecha_fin.strftime("%j")
+            str_hora = fecha_fin.strftime("%H")
+            fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
+            timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
+            timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
+            base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
+            return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
+
+        if st.button("🚀 Procesar las 24 Horas"):
+            headers = {"User-Agent": "Mozilla/5.0"}
+            minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+            
+            h_temp_etiquetas = []
+            h_temp_3d = np.zeros((24, 43, 81))
+            progreso_h = st.progress(0.0)
+            h_exito_total = True
+
+            for h in range(24):
+                link_exitoso = False
+                data = None
+                minuto_exitoso = 0
+
+                for m in minutes_contiguos:
+                    url_intento = generar_enlace_dlr_horas(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
+                    try:
+                        response = requests.get(url_intento, headers=headers, timeout=4)
+                        if response.status_code == 200:
+                            data = response.json()
+                            link_exitoso = True
+                            minuto_exitoso = m
+                            break
+                    except Exception:
+                        pass
+
+                if not link_exitoso:
+                    st.error(f"❌ Error: Archivos no encontrados o caídos en el servidor DLR para la hora {h:02d}:00 UTC. Proceso cancelado.")
+                    h_exito_total = False
+                    break
+
+                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                if len(vtec_values_list) == 3483:
+                    h_temp_3d[h, :, :] = np.array(vtec_values_list).reshape(43, 81)
+                    h_temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
+                
+                progreso_h.progress((h + 1) / 24)
+
+            if h_exito_total:
+                st.session_state.h_historial_vtec_3d = h_temp_3d
+                st.session_state.h_etiquetas_reales = h_temp_etiquetas
+                
+                max_r = np.max(h_temp_3d)
+                min_r = np.max([0.0, np.min(h_temp_3d)])
+                st.session_state.h_limites_globales = (max(0.0, float(np.floor(min_r - 2))), float(np.ceil(max_r + 2)))
+                st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
+                st.success("📊 Las 24 horas del día han sido procesadas con éxito.")
+
+        if st.session_state.h_historial_vtec_3d is not None:
+            st.divider()
+            
+            vh_min, vh_max = st.session_state.h_limites_globales
+            lons_vector = np.arange(-30, 51, 1)
+            lats_vector = np.arange(30, 73, 1)
+            grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
+
+            # --- MAPA DE MÁXIMOS HORARIOS FIJO ---
+            st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
+            fig_max_h, ax_mxh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+            ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+            ax_mxh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+            ax_mxh.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+            ax_mxh.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+            ax_mxh.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+
+            mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, 
+                                               transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
+            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='vertical', pad=0.02, shrink=0.8).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
+            ax_mxh.set_title(f"Intensidad Máxima Alcanzada por Coordenada en las 24h ({fecha_analisis_h.strftime('%d/%m/%Y')})", weight='bold')
+            st.pyplot(fig_max_h)
+            plt.close(fig_max_h)
+
+            st.divider()
+
+            # --- REPRODUCTOR HORARIO TIPO VIDEO (0.5s) ---
+            st.subheader("🎬 Reproductor Horario: Evolución Intradía (0.5s por Frame)")
+            col_bh1, _, _ = st.columns([1, 1, 4])
+            play_video_h = col_bh1.button("▶️ Reproducir Video Horario", key="play_horas")
+            contenedor_video_horas = st.empty()
+
+            if play_video_h:
+                for f in range(24):
+                    fig_vid_h, ax_evh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+                    ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_evh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_evh.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    ax_evh.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+                    ax_evh.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+                    
+                    matriz_frame_h = st.session_state.h_historial_vtec_3d[f, :, :]
+                    mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, matriz_frame_h, 
+                                                        transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
+                    fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                    ax_evh.set_title(f"Video Horario ➔ Hora: {st.session_state.h_etiquetas_reales[f]} UTC", weight='bold', color='#1976d2')
+                    
+                    contenedor_video_horas.pyplot(fig_vid_h)
+                    plt.close(fig_vid_h)
+                    time.sleep(0.5)
+            else:
+                fig_vid_h, ax_evh = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+                ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                ax_evh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                ax_evh.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                ax_evh.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+                ax_evh.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+                
+                mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[0, :, :], 
+                                                    transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
+                fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                ax_evh.set_title("Video Listo ➔ Presiona Play para iniciar la línea de tiempo horaria", weight='bold')
+                contenedor_video_horas.pyplot(fig_vid_h)
+                plt.close(fig_vid_h)
+
+            st.divider()
+
+            # --- GRÁFICA COMPARATIVA ACUMULATIVA HORARIA ---
+            st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
+            with st.form("formulario_acumulador_ciudades_horas"):
+                nueva_ciudad_h = st.text_input("Nombre de la ciudad a añadir al gráfico de 24h:", "Madrid")
+                boton_agregar_h = st.form_submit_button("➕ Añadir Ciudad al Análisis Horario")
+
+            if boton_agregar_h and nueva_ciudad_h:
+                lat_ch, lon_ch, _ = geocodificar_localidad(nueva_ciudad_h)
+                if lat_ch is not None and (30 <= lat_ch <= 72) and (-30 <= lon_ch <= 50):
+                    if nueva_ciudad_h.capitalize() not in [c['name'] for c in st.session_state.h_ciudades_lista]:
+                        st.session_state.h_ciudades_lista.append({'name': nueva_ciudad_h.capitalize(), 'lat': lat_ch, 'lon': lon_ch})
+                        st.success(f"Añadida {nueva_ciudad_h.capitalize()} al análisis horario.")
+                else:
+                    st.error("Ubicación no encontrada o fuera del área de cobertura de Europa.")
+
+            if st.session_state.h_ciudades_lista:
+                fig_lineas_h, ax_lineas_h = plt.subplots(figsize=(12, 5))
+                for ciudad_obj in st.session_state.h_ciudades_lista:
+                    idx_lat = (np.abs(lats_vector - ciudad_obj['lat'])).argmin()
+                    idx_lon = (np.abs(lons_vector - ciudad_obj['lon'])).argmin()
+                    perfil_temporal_h = st.session_state.h_historial_vtec_3d[:, idx_lat, idx_lon]
+                    ax_lineas_h.plot(range(24), perfil_temporal_h, marker='o', linestyle='-', linewidth=2, label=ciudad_obj['name'])
+
+                ax_lineas_h.grid(True, linestyle='--', alpha=0.6)
+                ax_lineas_h.set_ylim(vh_min, vh_max)
+                ax_lineas_h.set_xticks(range(24))
+                ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45)
+                ax_lineas_h.set_ylabel("VTEC (TECU)", weight='bold')
+                ax_lineas_h.set_xlabel("Línea Temporal de las 24 Horas (UTC)", weight='bold')
+                ax_lineas_h.set_title(f"Evolución Intradía Comparativa (Eje Y: {int(vh_min)}-{int(vh_max)} TECU)", weight='bold')
+                ax_lineas_h.legend(loc="upper right")
+                st.pyplot(fig_lineas_h)
+                plt.close(fig_lineas_h)
+                
+                if st.button("🗑️ Limpiar todas las ciudades del gráfico", key="clear_horas"):
+                    st.session_state.h_ciudades_lista = []
+                    st.rerun()
