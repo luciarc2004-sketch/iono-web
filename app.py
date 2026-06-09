@@ -16,7 +16,7 @@ st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 # =====================================================================
 tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "🛠️ Herramientas GNSS"])
 
-# FUNCION COMPARTIDA DE GEOCODIFICACIÓN
+# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN
 def geocodificar_localidad(nombre_lugar):
     try:
         url = f"https://nominatim.openstreetmap.org/search?q={nombre_lugar}&format=json&limit=1"
@@ -140,75 +140,4 @@ with tab1:
         g2.top_labels, g2.right_labels = False, False
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', zorder=2)
-        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU)', weight='bold')
-
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Error en Tiempo Real: {e}")
-
-# =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO (REDISEÑADA COMPLETAMENTE)
-# =====================================================================
-with tab2:
-    st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
-    st.write("Selecciona una fecha y una hora histórica. El sistema buscará en los repositorios oficiales del DLR.")
-
-    # Selectores de fecha y hora interactivos
-    col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_sel = col_f1.date_input("Selecciona la Fecha:", datetime.date(2026, 1, 24))
-    hora_sel = col_f2.slider("Hora (UTC):", 0, 23, 4)
-    minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5)
-
-    # Redondeo forzado automático para evitar links rotos (Bloques válidos de 15 minutos en el DLR)
-    minuto_ajustado = (minuto_sel // 15) * 15
-    if minuto_ajustado != minuto_sel:
-        st.caption(f"ℹ️ Los datos se aproximaron automáticamente al bloque válido más cercano del DLR: **{hora_sel:02d}:{minuto_ajustado:02d} UTC**.")
-
-    # Generación dinámica del link histórico
-    def generar_enlace_dlr_pasado(anio, mes, dia, hora, minuto):
-        fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-        str_anio = fecha_fin.strftime("%Y")
-        str_doy = fecha_fin.strftime("%j")
-        str_hora = fecha_fin.strftime("%H")
-
-        fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-        timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-        timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-
-        base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        nombre_archivo = f"DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/{nombre_archivo}"
-
-    url_pasado = generar_enlace_dlr_pasado(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
-
-    # Botón ejecutor para evitar que se sature la red pidiendo datos con cada click del slider
-    if st.button("🚀 Cargar Mapa Histórico de Europa"):
-        headers = {"User-Agent": "Mozilla/5.0"}
-        
-        with st.spinner("Conectando y validando base de datos histórica del DLR..."):
-            try:
-                response = requests.get(url_pasado, headers=headers, timeout=12)
-                response.raise_for_status() # Lanza error si el archivo no existe (Evita datos falsos)
-                data_p = response.json()
-
-                vtec_p_list = []
-                if 'data' in data_p and 'grid' in data_p['data']:
-                    for feature in data_p['data']['grid']['features']:
-                        vtec_p_list.append(feature['properties']['vtec_assimilated_tecu'])
-
-                # Protección estricta contra archivos corruptos/vacíos
-                if len(vtec_p_list) != 3483:
-                    st.error("🚨 Alarma: El archivo de esta fecha no cumple con la estructura reglamentaria de 3483 puntos.")
-                else:
-                    matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
-                    lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
-
-                    st.success(f"📌 Archivo validado y descargado con éxito.")
-
-                    # --- SECCIÓN CONSULTA LOCALIDAD PASADA ---
-                    st.markdown("### 🔍 Consulta de Localidad en esta Fecha")
-                    localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid", key="loc_pasada")
-                    
-                    if localidad_p_usuario:
-                        lat_p, lon_p, _ = geocodificar_localidad(localidad_p_usuario)
-                        if lat_p is not None and (30 <= lat_p <= 7
+        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (
