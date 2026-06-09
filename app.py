@@ -20,7 +20,7 @@ tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en e
 def geocodificar_localidad(nombre_lugar):
     try:
         url = f"https://nominatim.openstreetmap.org/search?q={nombre_lugar}&format=json&limit=1"
-        headers = {"User-Agent": "Streamlit_TEC_Monitor_App"}
+        headers = {"User-Agent": "Streamlit_TEC_Monitor_App_v2"}
         res = requests.get(url, headers=headers, timeout=10)
         data = res.json()
         if data:
@@ -151,13 +151,12 @@ with tab1:
         st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO (ESTABLE CON STATE)
+# PESTAÑA 2: ANÁLISIS EN EL PASADO 
 # =====================================================================
 with tab2:
     st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
     st.write("Selecciona una fecha y una hora histórica. El sistema buscará en los repositorios oficiales del DLR.")
 
-    # Inicializar la matriz en el estado de sesión para que no se borre al escribir la ciudad
     if 'matriz_pasado' not in st.session_state:
         st.session_state.matriz_pasado = None
     if 'fecha_mapa' not in st.session_state:
@@ -170,7 +169,7 @@ with tab2:
 
     minuto_ajustado = (minuto_sel // 15) * 15
     if minuto_ajustado != minuto_sel:
-        st.caption(f"ℹ️ Los datos se aproximarán automáticamente al bloque de 15 min: **{hora_sel:02d}:{minuto_ajustado:02d} UTC**.")
+        st.caption(f"ℹ️ Los datos se aproximaron automáticamente al bloque de 15 min: **{hora_sel:02d}:{minuto_ajustado:02d} UTC**.")
 
     def generar_enlace_dlr_pasado(anio, mes, dia, hora, minuto):
         fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
@@ -207,22 +206,29 @@ with tab2:
             except Exception:
                 st.error(f"❌ No existen registros en el DLR para la fecha/hora {hora_sel:02d}:{minuto_ajustado:02d} del {fecha_sel.strftime('%d/%m/%Y')}.")
 
-    # ZONA DE CONSULTA Y MAPA (FUERA DEL BOTÓN - RESISTENTE A REFRESH)
+    # SOLUCIÓN DE BUG DE STREAMLIT AQUÍ: Uso de un formulario dedicado para congelar variables
     if st.session_state.matriz_pasado is not None:
         st.divider()
         st.markdown(f"### 🔍 Consulta de Localidad en el Pasado ({st.session_state.fecha_mapa})")
-        localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid", key="loc_pasada")
         
+        # El formulario encapsula la interacción y evita que salte al 'else' erróneo
+        with st.form("formulario_consulta_pasado"):
+            localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid")
+            boton_consultar_ciudad = st.form_submit_with_button("Calcular TECU")
+
         lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
 
-        if localidad_p_usuario:
-            lat_p, lon_p, _ = geocodificar_localidad(localidad_p_usuario)
+        if boton_consultar_ciudad and localidad_p_usuario:
+            lat_p, lon_p, nombre_completo_p = geocodificar_localidad(localidad_p_usuario)
+            
             if lat_p is not None and (30 <= lat_p <= 72) and (-30 <= lon_p <= 50):
                 interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
+                
                 st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
+                st.caption(f"📍 Coordenadas utilizadas para el cálculo: {lat_p:.3f}°N, {lon_p:.3f}°E")
             else:
-                st.warning("La localidad indicada está fuera del rango de cobertura de Europa (-30° a 50° Lon, 30° a 72° Lat).")
+                st.warning("La localidad indicada está fuera del rango de cobertura de Europa o no fue encontrada por el buscador.")
 
         # RENDERIZADO DEL MAPA HISTÓRICO
         st.markdown("### 🗺️ Malla Regional de Europa Reconstruida")
