@@ -1,6 +1,8 @@
+
 numpy
 matplotlib
 cartopy
 geopy
 requests
 streamlit
+scipy
