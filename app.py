@@ -14,78 +14,16 @@ import streamlit as st
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
-# INYECCIÓN DE ESTILO FORMAL (Times New Roman & Detalles Rosa)
-# =====================================================================
-st.markdown("""
-<style>
-    /* Configuración de Tipografía Formal (Serif) para toda la aplicación */
-    html, body, [data-testid="stAppViewContainer"], .stApp {
-        font-family: 'Times New Roman', Times, Georgia, serif !important;
-    }
-    
-    /* Títulos principales y subtítulos */
-    h1, h2, h3, h4, h5, h6 {
-        font-family: 'Times New Roman', Times, Georgia, serif !important;
-        color: #1a237e !important; /* Azul marino formal para la estructura */
-    }
-    
-    /* Títulos de secciones específicas en Rosa Elegante */
-    .rosa-titulo {
-        color: #d81b60 !important;
-        font-family: 'Times New Roman', Times, Georgia, serif !important;
-        font-weight: bold;
-    }
-    
-    /* Ajuste de pestañas (Tabs) */
-    button[data-testid="stMarkdownContainer"] p {
-        font-size: 16px !important;
-    }
-    
-    /* Bordes de los formularios y cajas de texto con sutiles toques rosa */
-    div[data-testid="stForm"] {
-        border: 1px solid #f48fb1 !important;
-        border-radius: 6px !important;
-        background-color: #fcf8f9 !important;
-    }
-    
-    /* Estilo de los botones */
-    div.stButton > button {
-        background-color: #ffffff !important;
-        color: #d81b60 !important;
-        border: 1px solid #d81b60 !important;
-        font-family: 'Times New Roman', Times, Georgia, serif !important;
-        font-weight: bold !important;
-        border-radius: 4px !important;
-        transition: all 0.3s ease;
-    }
-    div.stButton > button:hover {
-        background-color: #d81b60 !important;
-        color: #ffffff !important;
-        border: 1px solid #d81b60 !important;
-    }
-    
-    /* Líneas divisorias en rosa degradado */
-    hr {
-        margin-top: 2rem !important;
-        margin-bottom: 2rem !important;
-        border: 0 !important;
-        height: 1px !important;
-        background-image: linear-gradient(to right, rgba(216, 27, 96, 0), rgba(216, 27, 96, 0.75), rgba(216, 27, 96, 0)) !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# =====================================================================
 # CONFIGURACIÓN GLOBAL
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Inicio y Monitoreo Real", 
-    "Análisis en el pasado", 
-    "Evolución TECU", 
-    "Pronóstico", 
-    "Desviaciones del Modelo"
+    "🌍 Inicio y Monitoreo Real", 
+    "📊 Análisis en el pasado", 
+    "📈 Evolución TECU", 
+    "🔮 Pronóstico", 
+    "📉 Desviaciones del Modelo"
 ])
 
 def geocodificar_localidad(nombre_lugar):
@@ -121,11 +59,6 @@ def geocodificar_localidad(nombre_lugar):
     except Exception: pass
     return None, None, None
 
-if 'global_mae' not in st.session_state:
-    st.session_state.global_mae = None
-    st.session_state.global_prec = None
-    st.session_state.global_ciudad_analizada = ""
-
 def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
     str_anio = fecha_fin.strftime("%Y")
@@ -138,9 +71,9 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL
 # =====================================================================
 with tab1:
-    st.markdown('<h1 class="rosa-titulo">Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)</h1>', unsafe_allow_html=True)
-    st.markdown("### Importancia del Contenido Total de Electrones en Sistemas GNSS")
-    st.markdown("El Contenido Total de Electrones (TEC) representa la densidad integrada de electrones libres a lo largo del trayecto orbital de una señal de satélite. Esta magnitud física se expresa formalmente en unidades TECU (donde 1 TECU equivale a $10^{16}$ electrones por metro cuadrado).")
+    st.title("🛰️ Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)")
+    st.markdown("### ¿Cómo afectan el TEC y el TECU a las señales GNSS?")
+    st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado).")
     st.divider()
 
     url_europa = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_latest_D.json"
@@ -165,10 +98,10 @@ with tab1:
         interp_europa = RegularGridInterpolator((lats_eur, lons_eur), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
         interp_global = RegularGridInterpolator((lats_glb, lons_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
-        st.markdown('<h3 class="rosa-titulo">Consulta de Intensidad por Localidad</h3>', unsafe_allow_html=True)
+        st.subheader("🔍 Consulta de TECU por Localidad (Tiempo Real)")
         with st.form("form_inicio_loc"):
-            localidad_usuario = st.text_input("Introduzca el nombre de la ciudad o región:", "Madrid")
-            boton_inicio_loc = st.form_submit_button("Consultar Registros")
+            localidad_usuario = st.text_input("Escribe el nombre de una ciudad o región:", "Madrid")
+            boton_inicio_loc = st.form_submit_button("Consultar TECU Real")
 
         if boton_inicio_loc and localidad_usuario:
             lat, lon, _ = geocodificar_localidad(localidad_usuario)
@@ -179,10 +112,10 @@ with tab1:
                 fuente = "Malla Regional Europa" if dentro_europa else "Malla Planetaria Global"
                 
                 col1, col2, col3 = st.columns(3)
-                col1.metric(label="Ubicación Analizada", value=localidad_usuario.capitalize())
-                col2.metric(label="Magnitud VTEC", value=f"{valor_tecu:.3f} TECU")
-                col3.info(f"**Coordenadas:** {lat:.2f}°N, {lon:.2f}°E\n\n**Origen:** {fuente}")
-            else: st.error("Error en la resolución geográfica de la localidad.")
+                col1.metric(label="📍 Ubicación", value=localidad_usuario.capitalize())
+                col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
+                col3.info(f"**Coordenadas:** {lat:.2f}°N, {lon:.2f}°E\n\n**Fuente:** {fuente}")
+            else: st.error("No se pudo mapear la ciudad.")
 
         st.divider()
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
@@ -202,30 +135,27 @@ with tab1:
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud')
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU)', weight='bold')
         st.pyplot(fig)
-        plt.close(fig)
-    except Exception as e: st.error(f"Error técnico en el módulo: {e}")
+    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
 # PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
 with tab2:
-    st.markdown('<h1 class="rosa-titulo">Análisis Histórico de Archivos Reconstruidos</h1>', unsafe_allow_html=True)
-    st.write("Módulo de extracción analítica para mallas de datos consolidadas en el repositorio del DLR.")
-
+    st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
     if 'matriz_pasado' not in st.session_state:
         st.session_state.matriz_pasado = None
     if 'fecha_mapa' not in st.session_state:
         st.session_state.fecha_mapa = ""
 
     col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_sel = col_f1.date_input("Fecha de Observación:", datetime.date(2026, 1, 24), key="past_date")
-    hora_sel = col_f2.slider("Hora de Observación (UTC):", 0, 23, 4, key="past_hour")
-    minuto_sel = col_f3.slider("Fracción de Minuto:", 0, 55, 0, step=5, key="past_min")
+    fecha_sel = col_f1.date_input("Selecciona la Fecha:", datetime.date(2026, 1, 24), key="past_date")
+    hora_sel = col_f2.slider("Hora (UTC):", 0, 23, 4, key="past_hour")
+    minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5, key="past_min")
 
     minuto_ajustado = (minuto_sel // 15) * 15
     url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    if st.button("Cargar Registro Histórico"):
+    if st.button("🚀 Cargar Mapa Histórico"):
         with st.spinner("Sincronizando Malla Geomagnética Histórica con el DLR..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             try:
@@ -234,14 +164,14 @@ with tab2:
                 vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
                 st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
                 st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
-                st.success("Archivo sincronizado con éxito.")
-            except Exception: st.error("No se localizó un registro consolidado para la fecha u hora especificada.")
+                st.success("📌 Archivo cargado correctamente.")
+            except Exception: st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
 
     if st.session_state.matriz_pasado is not None:
         st.divider()
         with st.form("formulario_consulta_pasado"):
-            localidad_p_usuario = st.text_input("Introduzca coordenada o localidad de control:", "Madrid")
-            boton_consultar_ciudad = st.form_submit_button("Calcular Parámetros")
+            localidad_p_usuario = st.text_input("Ingresa cualquier localidad dentro del recuadro del mapa:", "Madrid")
+            boton_consultar_ciudad = st.form_submit_button("Calcular TECU")
 
         lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
         if boton_consultar_ciudad and localidad_p_usuario:
@@ -249,8 +179,8 @@ with tab2:
             if lat_p is not None and (30 <= lat_p <= 72) and (-30 <= lon_p <= 50):
                 interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
-                st.metric(label=f"Magnitud en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
-            else: st.warning("La región indicada se encuentra fuera del rango instrumental cartográfico.")
+                st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
+            else: st.warning("Fuera de rango o no encontrada.")
 
         fig_p = plt.figure(figsize=(11, 6), dpi=100)
         ax_p = plt.axes(projection=ccrs.PlateCarree())
@@ -268,21 +198,21 @@ with tab2:
 # PESTAÑA 3: EVOLUCIÓN TECU
 # =====================================================================
 with tab3:
-    st.markdown('<h1 class="rosa-titulo">Estudio de Evolución Temporal y Variabilidad</h1>', unsafe_allow_html=True)
-    modo_evolucion = st.radio("Criterio de segmentación temporal:", ["Por Días", "Por Horas"], horizontal=True)
+    st.title("📈 Estudio de Evolución Temporal del TECU")
+    modo_evolucion = st.radio("Selecciona el tipo de análisis temporal:", ["Por Días", "Por Horas"], horizontal=True)
 
     if modo_evolucion == "Por Días":
-        st.markdown('<h3 class="rosa-titulo">Análisis de Evolución Interdiaria</h3>', unsafe_allow_html=True)
+        st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
             st.session_state.limites_globales, st.session_state.matriz_maximos, st.session_state.ciudades_lista = (0, 15), None, []
 
         col_c1, col_c2, col_c3 = st.columns(3)
-        fecha_inicial = col_c1.date_input("Fecha Inicial del Periodo:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
-        hora_fija_sel = col_c2.slider("Hora Fija de Sincronización (UTC):", 0, 23, 15, key="ev_hour_dias")
-        num_dias_sel = col_c3.slider("Rango de Días a Evaluar:", 2, 15, 10, key="ev_num_dias")
+        fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
+        hora_fija_sel = col_c2.slider("Hora fija de observación (UTC):", 0, 23, 15, key="ev_hour_dias")
+        num_dias_sel = col_c3.slider("Número de días a evaluar:", 2, 15, 10, key="ev_num_dias")
 
-        if st.button("Procesar Rango Temporal"):
+        if st.button("🚀 Procesar Rango de Días"):
             with st.spinner("Extrayendo Bloques Temporales del Servidor DLR..."):
                 headers = {"User-Agent": "Mozilla/5.0"}
                 temp_etiquetas, temp_3d = [], np.zeros((num_dias_sel, 43, 81))
@@ -302,7 +232,7 @@ with tab3:
                         except Exception: pass
 
                     if not link_exitoso:
-                        st.error(f"Falta de continuidad en el registro para el día: {fecha_actual.strftime('%d/%m/%Y')}.")
+                        st.error(f"❌ Sin datos para el día {fecha_actual.strftime('%d/%m/%Y')}.")
                         exito_total = False
                         break
 
@@ -315,25 +245,25 @@ with tab3:
                     st.session_state.etiquetas_fechas_reales = temp_etiquetas
                     st.session_state.limites_globales = (max(0.0, float(np.floor(np.min(temp_3d) - 2))), float(np.ceil(np.max(temp_3d) + 2)))
                     st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                    st.success("Mallas temporales procesadas correctamente.")
+                    st.success("📊 Rango temporal procesado.")
 
         if st.session_state.historial_vtec_3d is not None:
             v_min, v_max = st.session_state.limites_globales
             lons_vector, lats_vector = np.arange(-30, 51, 1), np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-            st.subheader("Distribución Cartográfica de Valores Máximos")
+            st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
             mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max)
-            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO REGISTRADO (TECU)', weight='bold')
+            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             st.pyplot(fig_max)
             plt.close(fig_max)
 
-            st.subheader("Secuencia Dinámica de Fotogramas de Evolución")
-            if st.button("Ejecutar Secuencia"):
+            st.subheader("🎬 Reproductor de Video: Evolución Diaria (0.5s por Frame)")
+            if st.button("▶️ Reproducir Video", key="play_dias"):
                 contenedor_video_mapa = st.empty()
                 for f in range(len(st.session_state.etiquetas_fechas_reales)):
                     fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
@@ -345,17 +275,17 @@ with tab3:
                     plt.close(fig_video)
                     time.sleep(0.5)
 
-            st.markdown('<h3 class="rosa-titulo">Gráfica Analítica de Estaciones de Control Acumuladas</h3>', unsafe_allow_html=True)
+            st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas")
             with st.form("formulario_acumulador_ciudades"):
-                nueva_ciudad = st.text_input("Añadir localidad a la serie comparativa:", "madrid")
-                boton_agregar = st.form_submit_button("Registrar Localidad")
+                nueva_ciudad = st.text_input("Ingresa cualquier localidad del mapa:", "madrid")
+                boton_agregar = st.form_submit_button("➕ Añadir Localidad")
 
             if boton_agregar and nueva_ciudad:
                 lat_c, lon_c, _ = geocodificar_localidad(nueva_ciudad)
                 if lat_c is not None and (30 <= lat_c <= 72) and (-30 <= lon_c <= 50):
                     if nueva_ciudad.capitalize() not in [c['name'] for c in st.session_state.ciudades_lista]:
                         st.session_state.ciudades_lista.append({'name': nueva_ciudad.capitalize(), 'lat': lat_c, 'lon': lon_c})
-                else: st.error("Coordenadas fuera del límite cartográfico.")
+                else: st.error("Fuera de rango o no encontrada.")
 
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
@@ -372,14 +302,14 @@ with tab3:
                 plt.close(fig_lineas)
 
     elif modo_evolucion == "Por Horas":
-        st.markdown('<h3 class="rosa-titulo">Análisis de Evolución Intradía (24 Horas)</h3>', unsafe_allow_html=True)
+        st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         if 'h_historial_vtec_3d' not in st.session_state:
             st.session_state.h_historial_vtec_3d, st.session_state.h_etiquetas_reales = None, []
             st.session_state.h_limites_globales, st.session_state.h_matriz_maximos, st.session_state.h_ciudades_lista = (0, 15), None, []
 
-        fecha_analisis_h = st.date_input("Día de Estudio Horario:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
+        fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
-        if st.button("Procesar Perfil Diario"):
+        if st.button("🚀 Procesar las 24 Horas"):
             with st.spinner("Escaneando Ciclos Diurnos Horarios (24 Frames)..."):
                 headers = {"User-Agent": "Mozilla/5.0"}
                 h_temp_etiquetas, h_temp_3d = [], np.zeros((24, 43, 81))
@@ -398,7 +328,7 @@ with tab3:
                         except Exception: pass
 
                     if not link_exitoso:
-                        st.error(f"Incompletitud de serie instrumental en la hora {h:02d}:00 UTC.")
+                        st.error(f"❌ Error en hora {h:02d}. Cancelado.")
                         h_exito_total = False
                         break
 
@@ -411,24 +341,24 @@ with tab3:
                     st.session_state.h_etiquetas_reales = h_temp_etiquetas
                     st.session_state.h_limites_globales = (max(0.0, float(np.floor(np.min(h_temp_3d) - 2))), float(np.ceil(np.max(h_temp_3d) + 2)))
                     st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
-                    st.success("Perfil horario completado.")
+                    st.success("📊 Completado.")
 
         if st.session_state.h_historial_vtec_3d is not None:
             vh_min, vh_max = st.session_state.h_limites_globales
             lons_vector, lats_vector = np.arange(-30, 51, 1), np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-            st.subheader("Distribución Cartográfica Estática Diaria")
+            st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max)
-            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DIARIO (TECU)', weight='bold')
+            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             st.pyplot(fig_max_h)
             plt.close(fig_max_h)
 
-            st.subheader("Secuencia Dinámica Horaria Continua")
-            if st.button("Ejecutar Video Horario"):
+            st.subheader("🎬 Reproductor Horario (0.5s por Frame)")
+            if st.button("▶️ Reproducir Video Horario", key="play_horas"):
                 contenedor_video_horas = st.empty()
                 for f in range(24):
                     fig_vid_h, ax_evh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
@@ -440,17 +370,17 @@ with tab3:
                     plt.close(fig_vid_h)
                     time.sleep(0.5)
 
-            st.markdown('<h3 class="rosa-titulo">Serie Temporal de Estaciones de Control (Diario)</h3>', unsafe_allow_html=True)
+            st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             with st.form("formulario_acumulador_ciudades_horas"):
-                nueva_ciudad_h = st.text_input("Añadir localidad a la serie:", "madrid")
-                boton_agregar_h = st.form_submit_button("Registrar Localidad")
+                nueva_ciudad_h = st.text_input("Nombre de la ciudad:", "madrid")
+                boton_agregar_h = st.form_submit_button("➕ Añadir Localidad")
 
             if boton_agregar_h and nueva_ciudad_h:
                 lat_ch, lon_ch, _ = geocodificar_localidad(nueva_ciudad_h)
                 if lat_ch is not None and (30 <= lat_ch <= 72) and (-30 <= lon_ch <= 50):
                     if nueva_ciudad_h.capitalize() not in [c['name'] for c in st.session_state.h_ciudades_lista]:
                         st.session_state.h_ciudades_lista.append({'name': nueva_ciudad_h.capitalize(), 'lat': lat_ch, 'lon': lon_ch})
-                else: st.error("Región fuera del área instrumental de cobertura.")
+                else: st.error("Fuera de rango o no encontrada.")
 
             if st.session_state.h_ciudades_lista:
                 fig_lineas_h, ax_lineas_h = plt.subplots(figsize=(12, 5))
@@ -470,9 +400,9 @@ with tab3:
 # PESTAÑA 4 Y PESTAÑA 5: EN ESPERA (VACÍAS EN REPOSO)
 # =====================================================================
 with tab4:
-    st.markdown('<h1 class="rosa-titulo">Predicción Científica del VTEC Ionosférico</h1>', unsafe_allow_html=True)
-    st.info("Este módulo se encuentra temporalmente vacío y en reposo para tareas de mantenimiento estructural del algoritmo. Volveremos a implementar el predictor próximamente.")
+    st.title("🔮 Predicción Científica del VTEC Ionosférico")
+    st.info("🛋️ Este módulo se encuentra temporalmente vacío y en reposo para tareas de mantenimiento del algoritmo. Volveremos a implementar el predictor próximamente.")
 
 with tab5:
-    st.markdown('<h1 class="rosa-titulo">Informe Analítico de Desviaciones</h1>', unsafe_allow_html=True)
-    st.info("El panel estadístico de desviaciones se activará de forma sincronizada en cuanto se reanuden las tareas de desarrollo del bloque de predicción.")
+    st.title("📉 Informe Analítico de Desviaciones")
+    st.info("ℹ️ El panel estadístico de desviaciones se activará de forma sincronizada en cuanto se reanuden las tareas de desarrollo del bloque de predicción.")
