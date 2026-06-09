@@ -16,17 +16,41 @@ st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 # =====================================================================
 tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "🛠️ Herramientas GNSS"])
 
-# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN
+# FUNCIÓN DE GEOCODIFICACIÓN MEJORADA CON COORDENADAS DE RESPALDO (ANTI-BLOQUEOS)
 def geocodificar_localidad(nombre_lugar):
+    nombre_clean = nombre_lugar.strip().lower()
+    
+    # Diccionario local para asegurar que las ciudades principales siempre funcionen al instante
+    ciudades_respaldo = {
+        "madrid": (40.4167, -3.7037),
+        "barcelona": (41.3851, 2.1734),
+        "valencia": (39.4699, -0.3763),
+        "sevilla": (37.3891, -5.9845),
+        "zaragoza": (41.6488, -0.8891),
+        "malaga": (36.7212, -4.4214),
+        "paris": (48.8566, 2.3522),
+        "berlin": (52.5200, 13.4050),
+        "roma": (41.9028, 12.4964),
+        "londres": (51.5074, -0.1278),
+        "lisboa": (38.7223, -9.1393)
+    }
+    
+    # Si la ciudad está en nuestra lista local, la devolvemos de inmediato (100% fiable)
+    if nombre_clean in ciudades_respaldo:
+        lat, lon = ciudades_respaldo[nombre_clean]
+        return lat, lon, nombre_lugar.capitalize()
+        
+    # Si no está en el diccionario, intentamos buscarla en la API externa
     try:
         url = f"https://nominatim.openstreetmap.org/search?q={nombre_lugar}&format=json&limit=1"
-        headers = {"User-Agent": "Streamlit_TEC_Monitor_App_v2"}
-        res = requests.get(url, headers=headers, timeout=10)
+        headers = {"User-Agent": "Streamlit_Ionosphere_App_Final_v3"}
+        res = requests.get(url, headers=headers, timeout=5)
         data = res.json()
         if data:
             return float(data[0]['lat']), float(data[0]['lon']), data[0]['display_name']
     except Exception:
         pass
+        
     return None, None, None
 
 # =====================================================================
@@ -40,7 +64,7 @@ with tab1:
     El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado). 
 
     La presencia de estos electrones libres interactúa de forma directa con las señales emitidas por sistemas globales de navegación por satélite (**GNSS**), tales como GPS, Galileo, GLONASS o BeiDou, causando los siguientes efectos principales:
-    * **Retardo Ionosférico:** Desacelera la velocidad de grupo de la señal de radio (y acelera la phase), lo que se traduce en un error de distancia calculado por el receptor. 10 TECU equivalen a aproximadamente 1.6 metros de error de rango en la frecuencia L1.
+    * **Retardo Ionosférico:** Desacelera la velocidad de grupo de la señal de radio (y acelera la fase), lo que se traduce en un error de distancia calculado por el receptor. 10 TECU equivalen a aproximadamente 1.6 metros de error de rango en la frecuencia L1.
     * **Cintilación Ionosférica:** Fluctuaciones rápidas en la amplitud y fase de la señal que pueden provocar la pérdida de enganche (loss-of-lock) del satélite por parte del receptor.
     * **Variabilidad Espacio-Temporal:** Durante tormentas solares, el TEC aumenta drásticamente de forma impredecible, afectando la precisión de servicios de alta precisión (como RTK o navegación aérea guiada por satélite).
     """)
@@ -206,14 +230,13 @@ with tab2:
             except Exception:
                 st.error(f"❌ No existen registros en el DLR para la fecha/hora {hora_sel:02d}:{minuto_ajustado:02d} del {fecha_sel.strftime('%d/%m/%Y')}.")
 
-    # CORRECCIÓN DEFINITIVA DEL BOTÓN DEL FORMULARIO AQUÍ
+    # AREA DE TRABAJO HISTORICA SECUENCIAL
     if st.session_state.matriz_pasado is not None:
         st.divider()
         st.markdown(f"### 🔍 Consulta de Localidad en el Pasado ({st.session_state.fecha_mapa})")
         
         with st.form("formulario_consulta_pasado"):
-            localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid")
-            # LINEA CORREGIDA: Cambio de st.form_submit_with_button a st.form_submit_button
+            localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico (Ej: madrid, barcelona, sevilla...):", "madrid")
             boton_consultar_ciudad = st.form_submit_button("Calcular TECU")
 
         lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
@@ -225,10 +248,11 @@ with tab2:
                 interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
                 
-                st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
-                st.caption(f"📍 Coordenadas utilizadas para el cálculo: {lat_p:.3f}°N, {lon_p:.3f}°E")
+                # Muestra el resultado de forma súper vistosa
+                st.metric(label=f"📡 Valor VTEC obtenido en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
+                st.info(f"📌 **Datos de localización usados:** Latitud: {lat_p:.3f}° | Longitud: {lon_p:.3f}°")
             else:
-                st.warning("La localidad indicada está fuera del rango de cobertura de Europa o no fue encontrada por el buscador.")
+                st.warning("La localidad indicada está fuera del rango de cobertura de Europa o el buscador externo no respondió. Prueba con otra ciudad cercana.")
 
         # RENDERIZADO DEL MAPA HISTÓRICO
         st.markdown("### 🗺️ Malla Regional de Europa Reconstruida")
@@ -254,7 +278,7 @@ with tab2:
         st.pyplot(fig_p)
 
 # =====================================================================
-# PESTAÑA 3: HERRAMIENTAS GNSS (ESPACIO PREPARADO)
+# PESTAÑA 3: HERRAMIENTAS GNSS
 # =====================================================================
 with tab3:
     st.title("🛠️ Calculadoras y Conversores GNSS")
