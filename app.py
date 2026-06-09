@@ -18,13 +18,8 @@ st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
-# Definición global de las pestañas obligatorias (Añadido: Pronóstico)
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🌍 Inicio y Monitoreo Real", 
-    "📊 Análisis en el pasado", 
-    "📈 Evolución TECU",
-    "🔮 Pronóstico"
-])
+# Definición global de las 5 pestañas obligatorias de la aplicación
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU", "🔮 Pronóstico", "📉 Desviaciones del Modelo"])
 
 # FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN BLINDADA (SISTEMA HÍBRIDO EXTENDIDO)
 def geocodificar_localidad(nombre_lugar):
@@ -85,6 +80,24 @@ def geocodificar_localidad(nombre_lugar):
         
     return None, None, None
 
+# Inicializar estados de sesión para compartir métricas con la Pestaña 5
+if 'global_mae' not in st.session_state:
+    st.session_state.global_mae = None
+    st.session_state.global_prec = None
+    st.session_state.global_ciudad_analizada = ""
+
+# FUNCIÓN CORRECTA DE GENERACIÓN DE ENLACES PARA EVITAR ERRORES DE URL (404)
+def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
+    fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
+    str_anio = fecha_fin.strftime("%Y")
+    str_doy = fecha_fin.strftime("%j")
+    str_hora = fecha_fin.strftime("%H")
+    fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
+    timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
+    timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
+    base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
+    return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
+
 # =====================================================================
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL
 # =====================================================================
@@ -94,21 +107,7 @@ with tab1:
     st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado).")
     st.divider()
 
-    def generar_enlace_dlr_europa_actual():
-        ahora = datetime.datetime.utcnow() - datetime.timedelta(hours=2)
-        anio, mes, dia, hora = ahora.year, ahora.month, ahora.day, ahora.hour
-        minuto = (ahora.minute // 15) * 15
-        fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-        str_anio = fecha_fin.strftime("%Y")
-        str_doy = fecha_fin.strftime("%j")
-        str_hora = fecha_fin.strftime("%H")
-        fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-        timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-        timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-        base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-
-    url_europa = generar_enlace_dlr_europa_actual()
+    url_europa = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_latest_D.json"
     url_global = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL_latest_D.json"
     headers = {"User-Agent": "Mozilla/5.0"}
 
@@ -157,19 +156,15 @@ with tab1:
                 col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
                 col3.info(f"**Coordenadas:** {lat:.2f}°N, {lon:.2f}°E\n\n**Fuente:** {fuente}")
             else:
-                st.error("Error de sincronización con el servidor de mapas. Inténtalo de nuevo en unos segundos.")
+                st.error("No se pudo mapear la ciudad. Inténtalo de nuevo.")
 
         st.divider()
-
-        st.subheader("🗺️ Mapas de Contenido Total de Electrones (VTEC) en Tiempo Real")
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         ax1.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
         ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
         ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
         ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
         ax1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
-        g1 = ax1.gridlines(draw_labels=True, color='gray', alpha=0.25, linestyle='--')
-        g1.top_labels, g1.right_labels = False, False
         grid_lon_eur, grid_lat_eur = np.meshgrid(lons_eur, lats_eur)
         map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
         fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC MALLA REGIONAL (TECU)', weight='bold')
@@ -179,8 +174,6 @@ with tab1:
         ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
         ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0, zorder=3)
         ax2.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
-        g2 = ax2.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--')
-        g2.top_labels, g2.right_labels = False, False
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', zorder=2)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU)', weight='bold')
@@ -193,8 +186,6 @@ with tab1:
 # =====================================================================
 with tab2:
     st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
-    st.write("Selecciona una fecha y una hora histórica. El sistema buscará en los repositorios oficiales del DLR.")
-
     if 'matriz_pasado' not in st.session_state:
         st.session_state.matriz_pasado = None
     if 'fecha_mapa' not in st.session_state:
@@ -206,18 +197,7 @@ with tab2:
     minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5, key="past_min")
 
     minuto_ajustado = (minuto_sel // 15) * 15
-    def generar_enlace_dlr_pasado(anio, mes, dia, hora, minuto):
-        fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-        str_anio = fecha_fin.strftime("%Y")
-        str_doy = fecha_fin.strftime("%j")
-        str_hora = fecha_fin.strftime("%H")
-        fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-        timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-        timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-        base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-
-    url_pasado = generar_enlace_dlr_pasado(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
+    url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
     if st.button("🚀 Cargar Mapa Histórico"):
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -256,12 +236,9 @@ with tab2:
         ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
         ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.2, zorder=3)
         ax_p.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
-        grid_p = ax_p.gridlines(draw_labels=True, color='gray', alpha=0.3, linestyle='--')
-        grid_p.top_labels, grid_p.right_labels = False, False
         grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
         mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
         plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC ASSIMILATED (TECU)', weight='bold')
-        plt.title(f"MAPA DE TEC RECONSTRUIDO\nFECHA: {st.session_state.fecha_mapa}", fontsize=11, weight='bold')
         st.pyplot(fig_p)
 
 # =====================================================================
@@ -285,17 +262,6 @@ with tab3:
         hora_fija_sel = col_c2.slider("Hora fija de observación (UTC):", 0, 23, 15, key="ev_hour_dias")
         num_dias_sel = col_c3.slider("Número de días a evaluar:", 2, 15, 10, key="ev_num_dias")
 
-        def generar_enlace_dlr_rango(anio, mes, dia, hora, minuto):
-            fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-            str_anio = fecha_fin.strftime("%Y")
-            str_doy = fecha_fin.strftime("%j")
-            str_hora = fecha_fin.strftime("%H")
-            fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-            timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-            timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-            base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-            return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-
         if st.button("🚀 Procesar Rango de Días"):
             headers = {"User-Agent": "Mozilla/5.0"}
             temp_etiquetas, temp_3d = [], np.zeros((num_dias_sel, 43, 81))
@@ -306,7 +272,7 @@ with tab3:
                 fecha_actual = datetime.datetime(fecha_inicial.year, fecha_inicial.month, fecha_inicial.day) + datetime.timedelta(days=d)
                 link_exitoso = False
                 for m in MINUTOS_CONTIGUOS_GLOBAL:
-                    url_intento = generar_enlace_dlr_rango(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
+                    url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
                         if response.status_code == 200:
@@ -343,8 +309,6 @@ with tab3:
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
             ax_mx.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-            ax_mx.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
-            ax_mx.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
             mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
             fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             st.pyplot(fig_max)
@@ -357,17 +321,13 @@ with tab3:
                     fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                     ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                    ax_ev.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                    ax_ev.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
                     mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
                     fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
-                    ax_ev.set_title(f"Fecha: {st.session_state.etiquetas_fechas_reales[f]} UTC", weight='bold', color='#1976d2')
                     contenedor_video_mapa.pyplot(fig_video)
                     plt.close(fig_video)
                     time.sleep(0.5)
 
-            st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas")
+            st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas")
             with st.form("formulario_acumulador_ciudades"):
                 nueva_ciudad = st.text_input("Ingresa cualquier localidad del mapa:", "madrid")
                 boton_agregar = st.form_submit_button("➕ Añadir Localidad")
@@ -393,9 +353,6 @@ with tab3:
                 st.pyplot(fig_lineas)
                 plt.close(fig_lineas)
 
-    # -----------------------------------------------------------------
-    # MÓDULO: POR HORAS
-    # -----------------------------------------------------------------
     elif modo_evolucion == "Por Horas":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         if 'h_historial_vtec_3d' not in st.session_state:
@@ -407,17 +364,6 @@ with tab3:
 
         fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
-        def generar_enlace_dlr_horas(anio, mes, dia, hora, minuto):
-            fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-            str_anio = fecha_fin.strftime("%Y")
-            str_doy = fecha_fin.strftime("%j")
-            str_hora = fecha_fin.strftime("%H")
-            fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-            timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-            timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-            base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-            return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-
         if st.button("🚀 Procesar las 24 Horas"):
             headers = {"User-Agent": "Mozilla/5.0"}
             h_temp_etiquetas, h_temp_3d = [], np.zeros((24, 43, 81))
@@ -427,7 +373,7 @@ with tab3:
             for h in range(24):
                 link_exitoso = False
                 for m in MINUTOS_CONTIGUOS_GLOBAL:
-                    url_intento = generar_enlace_dlr_horas(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
+                    url_intento = generar_enlace_dlr_seguro(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
                         if response.status_code == 200:
@@ -462,8 +408,6 @@ with tab3:
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-            ax_mxh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-            ax_mxh.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
             mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
             fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             st.pyplot(fig_max_h)
@@ -509,59 +453,45 @@ with tab3:
                 plt.close(fig_lineas_h)
 
 # =====================================================================
-# PESTAÑA 4: PRONÓSTICO (NUEVO DESARROLLO VERSIÓN 5.0)
+# PESTAÑA 4: PRONÓSTICO (URLS CORREGIDAS)
 # =====================================================================
 with tab4:
     st.title("🔮 Predicción Científica del VTEC Ionosférico")
     st.write("Establece una fecha base para calcular las tendencias estacionales y estimar el comportamiento futuro del TECU.")
 
-    # Selectores de parámetros para el modelo matemático
     col_p1, col_p2, col_p3 = st.columns(3)
     fecha_base_pr = col_p1.date_input("Fecha Base del Historial:", datetime.date(2026, 1, 1), key="pr_date")
-    ventana_hist_pr = col_p2.slider("Ventana de historial previo (Días):", 5, 20, 15, key="pr_hist_days")
+    ventana_hist_pr = col_p2.slider("Ventana de historial previo (Días):", 1, 15, 15, key="pr_hist_days")
     horizonte_pr = col_p3.radio("Horizonte de Predicción a calcular:", ["1 Hora", "3 Horas", "6 Horas"], index=2, horizontal=True)
 
-    # Buscador obligatorio de localidad
     with st.form("form_pronostico_ciudad"):
         ciudad_pronostico = st.text_input("Ingresa la ciudad o coordenadas a estudiar:", "Madrid")
-        boton_ejecutar_pr = st.form_submit_button("🚀 Calcular Pronóstico y Error Asociado")
-
-    def generar_enlace_dlr_pronostico(anio, mes, dia, hora, minuto):
-        fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-        str_anio = fecha_fin.strftime("%Y")
-        str_doy = fecha_fin.strftime("%j")
-        str_hora = fecha_fin.strftime("%H")
-        fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-        timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-        timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-        base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
+        boton_ejecutar_pr = st.form_submit_button("🚀 Calcular Pronóstico")
 
     if boton_ejecutar_pr and ciudad_pronostico:
         lons_vector, lats_vector = np.arange(-30, 51, 1), np.arange(30, 73, 1)
         lat_pr, lon_pr, _ = geocodificar_localidad(ciudad_pronostico)
 
         if lat_pr is None or not (30 <= lat_pr <= 72) or not (-30 <= lon_pr <= 50):
-            st.error("Ubicación fuera de los límites de la malla o inválida. Inténtalo de nuevo.")
+            st.error("Ubicación fuera de los límites de la malla o inválida.")
         else:
             idx_lat = (np.abs(lats_vector - lat_pr)).argmin()
             idx_lon = (np.abs(lons_vector - lon_pr)).argmin()
 
             headers = {"User-Agent": "Mozilla/5.0"}
-            horas_escanear = range(0, 24, 2) # Pasos bihorarios obligatorios
-            cronologia_vtec = []
-            fechas_eje_datetime = []
+            horas_escanear = range(0, 24, 2)
+            cronologia_vtec, fechas_eje_datetime = [], []
             fecha_base_dt = datetime.datetime(fecha_base_pr.year, fecha_base_pr.month, fecha_base_pr.day)
 
-            # Fase 1: Descarga del Pasado Histórico
             with st.spinner("Descargando historial bihorario..."):
                 exito_past = True
                 for dia_offset in range(ventana_hist_pr):
                     fecha_actual = fecha_base_dt + datetime.timedelta(days=dia_offset)
                     for hora_actual in horas_escanear:
                         link_exitoso = False
-                        for m in [0, 5, 10, 15]: # Escáner de seguridad integrado
-                            url_intento = generar_enlace_dlr_pronostico(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
+                        for m in [0, 5, 10, 15]:
+                            # CORREGIDO: Se llama al constructor dinámico seguro para evitar el 404 del DLR
+                            url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
                             try:
                                 response = requests.get(url_intento, headers=headers, timeout=3)
                                 if response.status_code == 200:
@@ -569,12 +499,10 @@ with tab4:
                                     link_exitoso = True
                                     break
                             except Exception: pass
-                        
                         if not link_exitoso:
-                            st.error(f"❌ Error: Datos históricos faltantes para el día {fecha_actual.strftime('%d/%m')} {hora_actual:02d}:00.")
+                            st.error(f"❌ Historial incompleto para el día {fecha_actual.strftime('%d/%m')} a las {hora_actual:02d}h.")
                             exito_past = False
                             break
-                    
                     if not exito_past: break
                     vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                     matriz_instante = np.array(vtec_values_list).reshape(43, 81)
@@ -583,36 +511,7 @@ with tab4:
 
             if exito_past:
                 vector_vtec_serie = np.array(cronologia_vtec)
-                
-                # Fase 2: Descarga del Futuro Real para Validación (Ventana fija de 6 horas)
-                cronologia_real_future = []
-                fechas_real_future = []
-                fecha_validacion_base = fecha_base_dt + datetime.timedelta(days=ventana_hist_pr)
-
-                with st.spinner("Sincronizando datos de validación..."):
-                    for hora_val in [0, 2, 4]:
-                        link_exitoso = False
-                        for m in [0, 5, 10, 15]:
-                            url_intento = generar_enlace_dlr_pronostico(fecha_validacion_base.year, fecha_validacion_base.month, fecha_validacion_base.day, hora_val, m)
-                            try:
-                                response = requests.get(url_intento, headers=headers, timeout=3)
-                                if response.status_code == 200:
-                                    data_val = response.json()
-                                    link_exitoso = True
-                                    break
-                            except Exception: pass
-                        
-                        vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data_val['data']['grid']['features']]
-                        matriz_instante = np.array(vtec_values_list).reshape(43, 81)
-                        cronologia_real_future.append(matriz_instante[idx_lat, idx_lon])
-                        fechas_real_future.append(fecha_validacion_base + datetime.timedelta(hours=hora_val))
-                
-                vector_real_futuro = np.array(cronologia_real_future)
-
-                # Fase 3: Procesamiento del Modelo Matemático
-                periodo = 12 # 12 muestras al día (cada 2 horas)
-                
-                # Traducir selección a muestras necesarias
+                periodo = 12
                 if horizonte_pr == "1 Hora": puntos_prediccion = 1
                 elif horizonte_pr == "3 Horas": puntos_prediccion = 2
                 else: puntos_prediccion = 3
@@ -626,61 +525,83 @@ with tab4:
                 anomalia_inicial = ultimo_valor_real - perfil_estacional[ultimo_slot_horario]
 
                 vector_prediccion_futura = []
-                alpha = 0.85 # Coeficiente de inercia ionosférica
-
                 for k in range(1, puntos_prediccion + 1):
                     slot_futuro = (ultimo_slot_horario + k) % periodo
-                    valor_predicho = perfil_estacional[slot_futuro] + anomalia_inicial * (alpha ** k)
-                    vector_prediccion_futura = np.append(vector_prediccion_futura, valor_predicho)
+                    vector_prediccion_futura.append(perfil_estacional[slot_futuro] + anomalia_inicial * (0.85 ** k))
 
-                # Cálculos de Ejes Verticales con Regla +-2
-                valores_ventana_grafica = np.concatenate([vector_vtec_serie[-12:], vector_real_futuro[:puntos_prediccion], vector_prediccion_futura])
-                Y_MIN_VAL = max(0.0, float(np.floor(np.min(valores_ventana_grafica) - 2)))
-                Y_MAX_VAL = float(np.ceil(np.max(valores_ventana_grafica) + 2))
+                cronologia_real_future = []
+                fechas_real_future = []
+                fecha_validacion_base = fecha_base_dt + datetime.timedelta(days=ventana_hist_pr)
 
-                # Fase 4: Renderizado de la Gráfica Predictiva
-                st.subheader(f"📊 Gráfica de Rendimiento y Contención Ionosférica en {ciudad_pronostico.capitalize()}")
-                
+                for index_h, hora_val in enumerate([0, 2, 4][:puntos_prediccion]):
+                    link_exitoso = False
+                    url_intento = generar_enlace_dlr_seguro(fecha_validacion_base.year, fecha_validacion_base.month, fecha_validacion_base.day, hora_val, 0)
+                    try:
+                        response = requests.get(url_intento, headers=headers, timeout=2)
+                        if response.status_code == 200:
+                            data_val = response.json()
+                            v_list = [f['properties']['vtec_assimilated_tecu'] for f in data_val['data']['grid']['features']]
+                            mat_val = np.array(v_list).reshape(43, 81)
+                            cronologia_real_future.append(mat_val[idx_lat, idx_lon])
+                            link_exitoso = True
+                    except Exception: pass
+                    
+                    if not link_exitoso:
+                        cronologia_real_future.append(None)
+                    fechas_real_future.append(fecha_validacion_base + datetime.timedelta(hours=hora_val))
+
+                datos_seguros_grafica = list(vector_vtec_serie[-12:]) + [v for v in vector_prediccion_futura if v is not None]
+                real_futuro_filtrado = [v for v in cronologia_real_future if v is not None]
+                if real_futuro_filtrado:
+                    datos_seguros_grafica += real_futuro_filtrado
+
+                Y_MIN_VAL = max(0.0, float(np.floor(np.min(datos_seguros_grafica) - 2)))
+                Y_MAX_VAL = float(np.ceil(np.max(datos_seguros_grafica) + 2))
+
+                st.subheader(f"📊 Gráfica de Pronóstico en {ciudad_pronostico.capitalize()}")
                 fig_pr, ax_pr = plt.subplots(figsize=(14, 5.5), dpi=100)
+                ax_pr.plot(fechas_eje_datetime[-12:], vector_vtec_serie[-12:], color='#2979ff', linewidth=2, label='Pasado Histórico Real (DLR)', marker='o')
+                ax_pr.plot(fechas_real_future, vector_prediccion_futura, color='#ff3d00', linewidth=2.5, linestyle='--', label='Predicción Matemática', marker='x')
                 
-                # Pasado (Últimas 24 horas del rango)
-                ax_pr.plot(fechas_eje_datetime[-12:], vector_vtec_serie[-12:],
-                           color='#2979ff', linewidth=2, label='Historial Real del Pasado (DLR)', marker='o', markersize=4)
-                
-                # Predicción matemática
-                ax_pr.plot(fechas_real_future[:puntos_prediccion], vector_prediccion_futura,
-                           color='#ff3d00', linewidth=2.5, linestyle='--', label=f'Predicción de Tendencia ({horizonte_pr})', marker='x', zorder=4)
-                
-                # Validación real
-                ax_pr.plot(fechas_real_future[:puntos_prediccion], vector_real_futuro[:puntos_prediccion],
-                           color='#00e676', linewidth=2.5, label='Datos Reales Obtenidos (Validación)', marker='s', markersize=5, zorder=3)
-
-                # Sombreado de error o divergencia
-                ax_pr.fill_between(fechas_real_future[:puntos_prediccion], vector_prediccion_futura, vector_real_futuro[:puntos_prediccion], 
-                                   color='#ff3d00', alpha=0.1, label='Divergencia Matemática / Margen de Error')
+                if real_futuro_filtrado and len(real_futuro_filtrado) == len(cronologia_real_future):
+                    ax_pr.plot(fechas_real_future, cronologia_real_future, color='#00e676', linewidth=2.5, label='Datos Reales de Validación', marker='s')
+                    ax_pr.fill_between(fechas_real_future, vector_prediccion_futura, cronologia_real_future, color='#ff3d00', alpha=0.1, label='Divergencia / Error')
+                    
+                    st.session_state.global_mae = np.mean(np.abs(np.array(cronologia_real_future) - np.array(vector_prediccion_futura)))
+                    st.session_state.global_prec = max(0.0, 100 - (st.session_state.global_mae / np.mean(cronologia_real_future)) * 100)
+                    st.session_state.global_ciudad_analizada = ciudad_pronostico.capitalize()
+                else:
+                    st.caption("ℹ️ Línea de validación real omitida: Los archivos para este bloque temporal futuro aún no han sido generados por el DLR.")
+                    st.session_state.global_mae = None
 
                 ax_pr.grid(True, linestyle='--', alpha=0.5)
                 ax_pr.set_ylim(Y_MIN_VAL, Y_MAX_VAL)
                 ax_pr.xaxis.set_major_locator(mdates.HourLocator(interval=2))
                 ax_pr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m\n%H:%M'))
-                ax_pr.set_ylabel("Intensidad VTEC (TECU)", weight='bold')
-                ax_pr.set_xlabel("Línea Temporal de Control de Radio (UTC)", weight='bold')
-                ax_pr.set_title(f"Evaluación Autoregresiva: Escala Vertical locked [{int(Y_MIN_VAL)}-{int(Y_MAX_VAL)} TECU]", weight='bold')
                 ax_pr.legend(loc='upper left')
-                
                 st.pyplot(fig_pr)
                 plt.close(fig_pr)
 
-                # Fase 5: Informe Estadístico de Error Cometido
-                st.divider()
-                st.subheader("📊 Informe Métrico de Precisión del Modelo")
-                
-                # Cálculo de desviaciones
-                errores_punto_a_punto = np.abs(vector_real_futuro[:puntos_prediccion] - vector_prediccion_futura)
-                mae_calculado = np.mean(errores_punto_a_punto)
-                porcentaje_acierto = max(0.0, 100 - (mae_calculado / np.mean(vector_real_futuro[:puntos_prediccion])) * 100)
-
-                col_m1, col_m2, col_m3 = st.columns(3)
-                col_m1.metric(label="📉 Error Absoluto Medio (MAE)", value=f"{mae_calculado:.3f} TECU", delta=f"{mae_calculado:.2f} Error", delta_color="inverse")
-                col_m2.metric(label="🎯 Fiabilidad Matemática del Modelo", value=f"{porcentaje_acierto:.1f} %")
-                col_m3.info(f"**Análisis de Desviación:**\n\nEl error máximo puntual cometido en la ventana temporal fue de **{np.max(errores_punto_a_punto):.3f} TECU**.")
+# =====================================================================
+# PESTAÑA 5: DESVIACIONES DEL MODELO
+# =====================================================================
+with tab5:
+    st.title("📉 Informe Analítico de Desviaciones del Modelo")
+    st.write("Analiza de forma estadística el margen de error y la fiabilidad del algoritmo predictivo autorregresivo.")
+    
+    if st.session_state.global_mae is not None:
+        st.success(f"### 📍 Último Análisis guardado: {st.session_state.global_ciudad_analizada}")
+        
+        col_inf1, col_inf2 = st.columns(2)
+        col_inf1.metric(label="📉 Error Absoluto Medio (MAE)", value=f"{st.session_state.global_mae:.4f} TECU", delta="Margen del Modelo", delta_color="inverse")
+        col_inf2.metric(label="🎯 Porcentaje de Precisión Global", value=f"{st.session_state.global_prec:.2f} %")
+        
+        st.divider()
+        st.markdown("""
+        ### Interpretación Científica de las Desviaciones:
+        * **Error < 1.0 TECU:** Predicción de alta confianza. Ideal para operaciones de posicionamiento de alta precisión (RTK).
+        * **Error entre 1.0 y 2.5 TECU:** Desviación moderada, usualmente causada por fluctuaciones térmicas diurnas normales en la ionosfera.
+        * **Error > 2.5 TECU:** Inestabilidad en la predicción. Ocurre comúnmente durante el inicio de tormentas solares o fenómenos de cintilación geomagnética imprevistos.
+        """)
+    else:
+        st.info("ℹ️ Para visualizar el informe analítico de desviaciones, ve a la pestaña **🔮 Pronóstico**, ingresa una ciudad y ejecuta un cálculo predictivo sobre una fecha pasada que contenga archivos completos de validación.")
