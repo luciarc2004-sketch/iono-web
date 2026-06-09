@@ -10,58 +10,86 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from scipy.interpolate import RegularGridInterpolator
 import streamlit as st
 
-# Configuración de la página web
-st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
+# Configuración de la página web con icono y diseño optimizados
+st.set_page_config(
+    page_title="Portal de Monitoreo Ionosférico", 
+    page_icon="🛰️", 
+    layout="wide"
+)
+
+# INYECCIÓN CSS: Animación personalizada de la Tierra rotando desde el Polo Norte
+st.markdown("""
+<style>
+@keyframes rotatePolar {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.polar-earth-loader {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 3px double #1e88e5;
+    background: radial-gradient(circle, #0d47a1 10%, #00e676 60%, #e3f2fd 90%);
+    position: relative;
+    box-shadow: 0 0 15px rgba(33, 150, 243, 0.5);
+    margin: 10px auto;
+}
+.polar-earth-loader::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-image: repeating-conic-gradient(from 0deg, rgba(255,255,255,0.4) 0deg 30deg, transparent 30deg 60deg);
+    border-radius: 50%;
+    animation: rotatePolar 3s linear infinite;
+}
+.polar-earth-loader::after {
+    content: '❄️';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+}
+.loader-container {
+    text-align: center;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border-left: 5px solid #1e88e5;
+    margin-bottom: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # =====================================================================
 # CONFIGURACIÓN GLOBAL
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 
-# Definición global de las 5 pestañas obligatorias de la aplicación
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU", "🔮 Pronóstico", "📉 Desviaciones del Modelo"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🌍 Inicio y Monitoreo Real", 
+    "📊 Análisis en el pasado", 
+    "📈 Evolución TECU", 
+    "🔮 Pronóstico", 
+    "📉 Desviaciones del Modelo"
+])
 
-# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN BLINDADA (SISTEMA HÍBRIDO EXTENDIDO)
 def geocodificar_localidad(nombre_lugar):
     nombre_clean = nombre_lugar.strip().lower()
     nombre_clean = nombre_clean.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
     
     ciudades_respaldo = {
-        "madrid": (40.4167, -3.7037),
-        "barcelona": (41.3851, 2.1734),
-        "puertollano": (38.6871, -4.1086),
-        "valencia": (39.4699, -0.3763),
-        "sevilla": (37.3891, -5.9845),
-        "zaragoza": (41.6488, -0.8891),
-        "malaga": (36.7212, -4.4214),
-        "murcia": (37.9922, -1.1307),
-        "palma": (39.5696, 2.6502),
-        "las palmas": (28.1235, -15.4363),
-        "bilbao": (43.2630, -2.9350),
-        "alicante": (38.3452, -0.4810),
-        "valladolid": (41.6523, -4.7245),
-        "vigo": (42.2406, -8.7207),
-        "gijon": (43.5357, -5.6615),
-        "hospitalet": (41.3597, 2.0997),
-        "coruña": (43.3623, -8.4115),
-        "granada": (37.1773, -3.5986),
-        "oviedo": (43.3603, -5.8448),
-        "albacete": (38.9943, -1.8585),
-        "santander": (43.4623, -3.8099),
-        "toledo": (39.8628, -4.0273),
-        "ciudad real": (38.9861, -3.9275),
-        "palermo": (38.1157, 13.3614),
-        "roma": (41.9028, 12.4964),
-        "paris": (48.8566, 2.3522),
-        "berlin": (52.5200, 13.4050),
-        "londres": (51.5074, -0.1278),
-        "lisboa": (38.7223, -9.1393),
-        "rabat": (34.0209, -6.8416),
-        "el cairo": (30.0444, 31.2357),
-        "tunez": (36.8065, 10.1815),
-        "argel": (36.7538, 3.0588),
-        "reikiavik": (64.1466, -21.9426),
-        "ankara": (39.9334, 32.8597)
+        "madrid": (40.4167, -3.7037), "barcelona": (41.3851, 2.1734), "puertollano": (38.6871, -4.1086),
+        "valencia": (39.4699, -0.3763), "sevilla": (37.3891, -5.9845), "zaragoza": (41.6488, -0.8891),
+        "malaga": (36.7212, -4.4214), "murcia": (37.9922, -1.1307), "palma": (39.5696, 2.6502),
+        "las palmas": (28.1235, -15.4363), "bilbao": (43.2630, -2.9350), "alicante": (38.3452, -0.4810),
+        "valladolid": (41.6523, -4.7245), "vigo": (42.2406, -8.7207), "gijon": (43.5357, -5.6615),
+        "hospitalet": (41.3597, 2.0997), "coruña": (43.3623, -8.4115), "granada": (37.1773, -3.5986),
+        "oviedo": (43.3603, -5.8448), "albacete": (38.9943, -1.8585), "santander": (43.4623, -3.8099),
+        "toledo": (39.8628, -4.0273), "ciudad real": (38.9861, -3.9275), "palermo": (38.1157, 13.3614),
+        "roma": (41.9028, 12.4964), "paris": (48.8566, 2.3522), "berlin": (52.5200, 13.4050),
+        "londres": (51.5074, -0.1278), "lisboa": (38.7223, -9.1393), "rabat": (34.0209, -6.8416),
+        "el cairo": (30.0444, 31.2357), "tunez": (36.8065, 10.1815), "argel": (36.7538, 3.0588),
+        "reikiavik": (64.1466, -21.9426), "ankara": (39.9334, 32.8597)
     }
     
     if nombre_clean in ciudades_respaldo:
@@ -75,28 +103,22 @@ def geocodificar_localidad(nombre_lugar):
         if 'geonames' in data and len(data['geonames']) > 0:
             item = data['geonames'][0]
             return float(item['lat']), float(item['lng']), item['name']
-    except Exception:
-        pass
-        
+    except Exception: pass
     return None, None, None
 
-# Inicializar estados de sesión para compartir métricas con la Pestaña 5
 if 'global_mae' not in st.session_state:
     st.session_state.global_mae = None
     st.session_state.global_prec = None
     st.session_state.global_ciudad_analizada = ""
 
-# FUNCIÓN CORRECTA DE GENERACIÓN DE ENLACES PARA EVITAR ERRORES DE URL (404)
+# REGENERADOR ESTABLE DE ENLACES CON REGLA ESTRICTA DE MARGEN DE TIEMPO DEL DLR
 def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
     str_anio = fecha_fin.strftime("%Y")
     str_doy = fecha_fin.strftime("%j")
     str_hora = fecha_fin.strftime("%H")
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-    timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-    timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-    base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-    return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
+    return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
 
 # =====================================================================
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL
@@ -115,15 +137,10 @@ with tab1:
     def cargar_datos_vtec():
         res_eur = requests.get(url_europa, headers=headers, timeout=15)
         res_eur.raise_for_status()
-        data_eur = res_eur.json()
-        vtec_eur_list = [f['properties']['vtec_assimilated_tecu'] for f in data_eur['data']['grid']['features']]
-        matriz_vtec_eur = np.array(vtec_eur_list).reshape(43, 81)
-        
+        matriz_vtec_eur = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_eur.json()['data']['grid']['features']]).reshape(43, 81)
         res_glb = requests.get(url_global, headers=headers, timeout=15)
         res_glb.raise_for_status()
-        data_glb = res_glb.json()
-        vtec_glb_list = [f['properties']['vtec_assimilated_tecu'] for f in data_glb['data']['grid']['features']]
-        matriz_vtec_glb = np.array(vtec_glb_list).reshape(73, 73)
+        matriz_vtec_glb = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_glb.json()['data']['grid']['features']]).reshape(73, 73)
         return matriz_vtec_eur, matriz_vtec_glb
 
     try:
@@ -140,46 +157,38 @@ with tab1:
             boton_inicio_loc = st.form_submit_button("Consultar TECU Real")
 
         if boton_inicio_loc and localidad_usuario:
-            lat, lon, nombre_completo = geocodificar_localidad(localidad_usuario)
+            lat, lon, _ = geocodificar_localidad(localidad_usuario)
             if lat is not None:
                 dentro_europa = (30 <= lat <= 72) and (-30 <= lon <= 50)
                 punto_consulta = np.array([[lat, lon]])
-                if dentro_europa:
-                    valor_tecu = float(interp_europa(punto_consulta)[0])
-                    fuente = "Malla Regional (Alta Precisión - Res: 1°)"
-                else:
-                    valor_tecu = float(interp_global(punto_consulta)[0])
-                    fuente = "Malla Planetaria Global"
-                    
+                valor_tecu = float(interp_europa(punto_consulta)[0]) if dentro_europa else float(interp_global(punto_consulta)[0])
+                fuente = "Malla Regional Europa" if dentro_europa else "Malla Planetaria Global"
+                
                 col1, col2, col3 = st.columns(3)
                 col1.metric(label="📍 Ubicación", value=localidad_usuario.capitalize())
                 col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
                 col3.info(f"**Coordenadas:** {lat:.2f}°N, {lon:.2f}°E\n\n**Fuente:** {fuente}")
-            else:
-                st.error("No se pudo mapear la ciudad. Inténtalo de nuevo.")
+            else: st.error("No se pudo mapear la ciudad.")
 
         st.divider()
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         ax1.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-        ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-        ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-        ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-        ax1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
+        ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
         grid_lon_eur, grid_lat_eur = np.meshgrid(lons_eur, lats_eur)
-        map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
+        map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud')
         fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC MALLA REGIONAL (TECU)', weight='bold')
 
         ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-        ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-        ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-        ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0, zorder=3)
-        ax2.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+        ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0)
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
-        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', zorder=2)
+        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud')
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU)', weight='bold')
         st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Error en Tiempo Real: {e}")
+    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
 # PESTAÑA 2: ANÁLISIS EN EL PASADO
@@ -200,18 +209,21 @@ with tab2:
     url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
     if st.button("🚀 Cargar Mapa Histórico"):
+        # LLAMADA AL LOADER DE LA TIERRA ROTANDO EN POLAR
+        placeholder_load = st.empty()
+        placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Sincronizando Malla Geomagnética Histórica con el DLR...</p></div>', unsafe_allow_html=True)
         headers = {"User-Agent": "Mozilla/5.0"}
-        with st.spinner("Descargando base de datos histórica del DLR..."):
-            try:
-                response = requests.get(url_pasado, headers=headers, timeout=12)
-                response.raise_for_status() 
-                data_p = response.json()
-                vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in data_p['data']['grid']['features']]
-                st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
-                st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
-                st.success(f"📌 Archivo cargado correctamente.")
-            except Exception:
-                st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
+        try:
+            response = requests.get(url_pasado, headers=headers, timeout=12)
+            response.raise_for_status() 
+            vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
+            st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
+            st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
+            placeholder_load.empty()
+            st.success("📌 Archivo cargado correctamente.")
+        except Exception:
+            placeholder_load.empty()
+            st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
 
     if st.session_state.matriz_pasado is not None:
         st.divider()
@@ -226,20 +238,19 @@ with tab2:
                 interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
                 st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
-            else:
-                st.warning("La localidad indicada está fuera de cobertura o no fue encontrada.")
+            else: st.warning("Fuera de rango o no encontrada.")
 
         fig_p = plt.figure(figsize=(11, 6), dpi=100)
         ax_p = plt.axes(projection=ccrs.PlateCarree())
         ax_p.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.2, zorder=3)
-        ax_p.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
+        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222')
         grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
-        mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
+        mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud')
         plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC ASSIMILATED (TECU)', weight='bold')
         st.pyplot(fig_p)
+        plt.close(fig_p)
 
 # =====================================================================
 # PESTAÑA 3: EVOLUCIÓN TECU
@@ -251,11 +262,8 @@ with tab3:
     if modo_evolucion == "Por Días":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         if 'historial_vtec_3d' not in st.session_state:
-            st.session_state.historial_vtec_3d = None
-            st.session_state.etiquetas_fechas_reales = []
-            st.session_state.limites_globales = (0, 15)
-            st.session_state.matriz_maximos = None
-            st.session_state.ciudades_lista = []
+            st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
+            st.session_state.limites_globales, st.session_state.matriz_maximos, st.session_state.ciudades_lista = (0, 15), None, []
 
         col_c1, col_c2, col_c3 = st.columns(3)
         fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
@@ -263,9 +271,10 @@ with tab3:
         num_dias_sel = col_c3.slider("Número de días a evaluar:", 2, 15, 10, key="ev_num_dias")
 
         if st.button("🚀 Procesar Rango de Días"):
+            placeholder_load = st.empty()
+            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Extrayendo Bloques Temporales del Servidor DLR...</p></div>', unsafe_allow_html=True)
             headers = {"User-Agent": "Mozilla/5.0"}
             temp_etiquetas, temp_3d = [], np.zeros((num_dias_sel, 43, 81))
-            progreso = st.progress(0.0)
             exito_total = True
 
             for d in range(num_dias_sel):
@@ -282,6 +291,7 @@ with tab3:
                     except Exception: pass
 
                 if not link_exitoso:
+                    placeholder_load.empty()
                     st.error(f"❌ Sin datos para el día {fecha_actual.strftime('%d/%m/%Y')}.")
                     exito_total = False
                     break
@@ -289,14 +299,14 @@ with tab3:
                 vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                 temp_3d[d, :, :] = np.array(vtec_values_list).reshape(43, 81)
                 temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} ({hora_fija_sel:02d}:{minuto_exitoso:02d})")
-                progreso.progress((d + 1) / num_dias_sel)
 
+            placeholder_load.empty()
             if exito_total:
                 st.session_state.historial_vtec_3d = temp_3d
                 st.session_state.etiquetas_fechas_reales = temp_etiquetas
                 st.session_state.limites_globales = (max(0.0, float(np.floor(np.min(temp_3d) - 2))), float(np.ceil(np.max(temp_3d) + 2)))
                 st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                st.success("📊 Procesado con éxito.")
+                st.success("📊 Rango temporal procesado.")
 
         if st.session_state.historial_vtec_3d is not None:
             v_min, v_max = st.session_state.limites_globales
@@ -306,10 +316,9 @@ with tab3:
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-            ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-            ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-            ax_mx.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-            mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+            ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+            mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max)
             fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             st.pyplot(fig_max)
             plt.close(fig_max)
@@ -320,8 +329,8 @@ with tab3:
                 for f in range(len(st.session_state.etiquetas_fechas_reales)):
                     fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-                    ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+                    ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+                    mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max)
                     fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                     contenedor_video_mapa.pyplot(fig_video)
                     plt.close(fig_video)
@@ -356,18 +365,16 @@ with tab3:
     elif modo_evolucion == "Por Horas":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         if 'h_historial_vtec_3d' not in st.session_state:
-            st.session_state.h_historial_vtec_3d = None
-            st.session_state.h_etiquetas_reales = []
-            st.session_state.h_limites_globales = (0, 15)
-            st.session_state.h_matriz_maximos = None
-            st.session_state.h_ciudades_lista = []
+            st.session_state.h_historial_vtec_3d, st.session_state.h_etiquetas_reales = None, []
+            st.session_state.h_limites_globales, st.session_state.h_matriz_maximos, st.session_state.h_ciudades_lista = (0, 15), None, []
 
         fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
         if st.button("🚀 Procesar las 24 Horas"):
+            placeholder_load = st.empty()
+            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Escaneando Ciclos Diurnos Horarios (24 Frames)...</p></div>', unsafe_allow_html=True)
             headers = {"User-Agent": "Mozilla/5.0"}
             h_temp_etiquetas, h_temp_3d = [], np.zeros((24, 43, 81))
-            progreso_h = st.progress(0.0)
             h_exito_total = True
 
             for h in range(24):
@@ -383,6 +390,7 @@ with tab3:
                     except Exception: pass
 
                 if not link_exitoso:
+                    placeholder_load.empty()
                     st.error(f"❌ Error en hora {h:02d}. Cancelado.")
                     h_exito_total = False
                     break
@@ -390,8 +398,8 @@ with tab3:
                 vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                 h_temp_3d[h, :, :] = np.array(vtec_values_list).reshape(43, 81)
                 h_temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
-                progreso_h.progress((h + 1) / 24)
 
+            placeholder_load.empty()
             if h_exito_total:
                 st.session_state.h_historial_vtec_3d = h_temp_3d
                 st.session_state.h_etiquetas_reales = h_temp_etiquetas
@@ -407,8 +415,8 @@ with tab3:
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-            ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-            mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
+            ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max)
             fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             st.pyplot(fig_max_h)
             plt.close(fig_max_h)
@@ -419,8 +427,8 @@ with tab3:
                 for f in range(24):
                     fig_vid_h, ax_evh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-                    ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max, zorder=2)
+                    ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+                    mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max)
                     fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                     contenedor_video_horas.pyplot(fig_vid_h)
                     plt.close(fig_vid_h)
@@ -453,15 +461,15 @@ with tab3:
                 plt.close(fig_lineas_h)
 
 # =====================================================================
-# PESTAÑA 4: PRONÓSTICO (URLS CORREGIDAS)
+# PESTAÑA 4: PRONÓSTICO (UNIFICADO Y CORREGIDO 100%)
 # =====================================================================
 with tab4:
     st.title("🔮 Predicción Científica del VTEC Ionosférico")
     st.write("Establece una fecha base para calcular las tendencias estacionales y estimar el comportamiento futuro del TECU.")
 
     col_p1, col_p2, col_p3 = st.columns(3)
-    fecha_base_pr = col_p1.date_input("Fecha Base del Historial:", datetime.date(2026, 1, 1), key="pr_date")
-    ventana_hist_pr = col_p2.slider("Ventana de historial previo (Días):", 1, 15, 15, key="pr_hist_days")
+    fecha_base_pr = col_p1.date_input("Fecha Base del Historial:", datetime.date(2026, 1, 10), key="pr_date")
+    ventana_hist_pr = col_p2.slider("Ventana de historial previo (Días):", 1, 15, 3, key="pr_hist_days")
     horizonte_pr = col_p3.radio("Horizonte de Predicción a calcular:", ["1 Hora", "3 Horas", "6 Horas"], index=2, horizontal=True)
 
     with st.form("form_pronostico_ciudad"):
@@ -478,43 +486,44 @@ with tab4:
             idx_lat = (np.abs(lats_vector - lat_pr)).argmin()
             idx_lon = (np.abs(lons_vector - lon_pr)).argmin()
 
+            placeholder_load = st.empty()
+            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Computando Tendencias Estacionales Bihorarias en el Polo...</p></div>', unsafe_allow_html=True)
+
             headers = {"User-Agent": "Mozilla/5.0"}
             horas_escanear = range(0, 24, 2)
             cronologia_vtec, fechas_eje_datetime = [], []
             fecha_base_dt = datetime.datetime(fecha_base_pr.year, fecha_base_pr.month, fecha_base_pr.day)
+            exito_past = True
 
-            with st.spinner("Descargando historial bihorario..."):
-                exito_past = True
-                for dia_offset in range(ventana_hist_pr):
-                    fecha_actual = fecha_base_dt + datetime.timedelta(days=dia_offset)
-                    for hora_actual in horas_escanear:
-                        link_exitoso = False
-                        for m in [0, 5, 10, 15]:
-                            # CORREGIDO: Se llama al constructor dinámico seguro para evitar el 404 del DLR
-                            url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
-                            try:
-                                response = requests.get(url_intento, headers=headers, timeout=3)
-                                if response.status_code == 200:
-                                    data = response.json()
-                                    link_exitoso = True
-                                    break
-                            except Exception: pass
-                        if not link_exitoso:
-                            st.error(f"❌ Historial incompleto para el día {fecha_actual.strftime('%d/%m')} a las {hora_actual:02d}h.")
-                            exito_past = False
-                            break
-                    if not exito_past: break
-                    vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                    matriz_instante = np.array(vtec_values_list).reshape(43, 81)
-                    cronologia_vtec.append(matriz_instante[idx_lat, idx_lon])
-                    fechas_eje_datetime.append(fecha_actual + datetime.timedelta(hours=hora_actual))
+            # Fase 1: Descarga Estricta del Pasado
+            for dia_offset in range(ventana_hist_pr):
+                fecha_actual = fecha_base_dt + datetime.timedelta(days=dia_offset)
+                for hora_actual in horas_escanear:
+                    link_exitoso = False
+                    for m in [0, 5, 10, 15]:
+                        url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
+                        try:
+                            response = requests.get(url_intento, headers=headers, timeout=3)
+                            if response.status_code == 200:
+                                data = response.json()
+                                link_exitoso = True
+                                break
+                        except Exception: pass
+                    if not link_exitoso:
+                        placeholder_load.empty()
+                        st.error(f"❌ Historial incompleto para el día {fecha_actual.strftime('%d/%m')} a las {hora_actual:02d}h.")
+                        exito_past = False
+                        break
+                if not exito_past: break
+                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                matriz_instante = np.array(vtec_values_list).reshape(43, 81)
+                cronologia_vtec.append(matriz_instante[idx_lat, idx_lon])
+                fechas_eje_datetime.append(fecha_actual + datetime.timedelta(hours=hora_actual))
 
             if exito_past:
                 vector_vtec_serie = np.array(cronologia_vtec)
                 periodo = 12
-                if horizonte_pr == "1 Hora": puntos_prediccion = 1
-                elif horizonte_pr == "3 Horas": puntos_prediccion = 2
-                else: puntos_prediccion = 3
+                puntos_prediccion = 1 if horizonte_pr == "1 Hora" else (2 if horizonte_pr == "3 Horas" else 3)
 
                 perfil_estacional = np.zeros(periodo)
                 for i in range(periodo):
@@ -529,31 +538,30 @@ with tab4:
                     slot_futuro = (ultimo_slot_horario + k) % periodo
                     vector_prediccion_futura.append(perfil_estacional[slot_futuro] + anomalia_inicial * (0.85 ** k))
 
-                cronologia_real_future = []
-                fechas_real_future = []
+                # Fase 2: Descarga del Futuro Real para Validación (URLs Arregladas)
+                cronologia_real_future, fechas_real_future = [], []
                 fecha_validacion_base = fecha_base_dt + datetime.timedelta(days=ventana_hist_pr)
 
-                for index_h, hora_val in enumerate([0, 2, 4][:puntos_prediccion]):
+                for hora_val in [0, 2, 4][:puntos_prediccion]:
                     link_exitoso = False
-                    url_intento = generar_enlace_dlr_seguro(fecha_validacion_base.year, fecha_validacion_base.month, fecha_validacion_base.day, hora_val, 0)
-                    try:
-                        response = requests.get(url_intento, headers=headers, timeout=2)
-                        if response.status_code == 200:
-                            data_val = response.json()
-                            v_list = [f['properties']['vtec_assimilated_tecu'] for f in data_val['data']['grid']['features']]
-                            mat_val = np.array(v_list).reshape(43, 81)
-                            cronologia_real_future.append(mat_val[idx_lat, idx_lon])
-                            link_exitoso = True
-                    except Exception: pass
-                    
-                    if not link_exitoso:
-                        cronologia_real_future.append(None)
+                    for m in [0, 5, 10, 15]:
+                        url_intento = generar_enlace_dlr_seguro(fecha_validacion_base.year, fecha_validacion_base.month, fecha_validacion_base.day, hora_val, m)
+                        try:
+                            response = requests.get(url_intento, headers=headers, timeout=2)
+                            if response.status_code == 200:
+                                v_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
+                                cronologia_real_future.append(np.array(v_list).reshape(43, 81)[idx_lat, idx_lon])
+                                link_exitoso = True
+                                break
+                        except Exception: pass
+                    if not link_exitoso: cronologia_real_future.append(None)
                     fechas_real_future.append(fecha_validacion_base + datetime.timedelta(hours=hora_val))
 
-                datos_seguros_grafica = list(vector_vtec_serie[-12:]) + [v for v in vector_prediccion_futura if v is not None]
+                placeholder_load.empty()
+
+                # --- FILTRADO DE SEGURIDAD PARA LIMITES DE MATPLOTLIB ---
                 real_futuro_filtrado = [v for v in cronologia_real_future if v is not None]
-                if real_futuro_filtrado:
-                    datos_seguros_grafica += real_futuro_filtrado
+                datos_seguros_grafica = list(vector_vtec_serie[-12:]) + list(vector_prediccion_futura) + real_futuro_filtrado
 
                 Y_MIN_VAL = max(0.0, float(np.floor(np.min(datos_seguros_grafica) - 2)))
                 Y_MAX_VAL = float(np.ceil(np.max(datos_seguros_grafica) + 2))
@@ -563,15 +571,14 @@ with tab4:
                 ax_pr.plot(fechas_eje_datetime[-12:], vector_vtec_serie[-12:], color='#2979ff', linewidth=2, label='Pasado Histórico Real (DLR)', marker='o')
                 ax_pr.plot(fechas_real_future, vector_prediccion_futura, color='#ff3d00', linewidth=2.5, linestyle='--', label='Predicción Matemática', marker='x')
                 
-                if real_futuro_filtrado and len(real_futuro_filtrado) == len(cronologia_real_future):
+                if len(real_futuro_filtrado) == len(cronologia_real_future):
                     ax_pr.plot(fechas_real_future, cronologia_real_future, color='#00e676', linewidth=2.5, label='Datos Reales de Validación', marker='s')
                     ax_pr.fill_between(fechas_real_future, vector_prediccion_futura, cronologia_real_future, color='#ff3d00', alpha=0.1, label='Divergencia / Error')
-                    
                     st.session_state.global_mae = np.mean(np.abs(np.array(cronologia_real_future) - np.array(vector_prediccion_futura)))
                     st.session_state.global_prec = max(0.0, 100 - (st.session_state.global_mae / np.mean(cronologia_real_future)) * 100)
                     st.session_state.global_ciudad_analizada = ciudad_pronostico.capitalize()
                 else:
-                    st.caption("ℹ️ Línea de validación real omitida: Los archivos para este bloque temporal futuro aún no han sido generados por el DLR.")
+                    st.caption("ℹ️ Línea de validación real omitida: Los archivos futuros no están disponibles en el DLR.")
                     st.session_state.global_mae = None
 
                 ax_pr.grid(True, linestyle='--', alpha=0.5)
@@ -587,21 +594,19 @@ with tab4:
 # =====================================================================
 with tab5:
     st.title("📉 Informe Analítico de Desviaciones del Modelo")
-    st.write("Analiza de forma estadística el margen de error y la fiabilidad del algoritmo predictivo autorregresivo.")
+    st.write("Analiza el margen de error y la fiabilidad del algoritmo predictivo autorregresivo.")
     
     if st.session_state.global_mae is not None:
         st.success(f"### 📍 Último Análisis guardado: {st.session_state.global_ciudad_analizada}")
-        
         col_inf1, col_inf2 = st.columns(2)
-        col_inf1.metric(label="📉 Error Absoluto Medio (MAE)", value=f"{st.session_state.global_mae:.4f} TECU", delta="Margen del Modelo", delta_color="inverse")
+        col_inf1.metric(label="📉 Error Absoluto Medio (MAE)", value=f"{st.session_state.global_mae:.4f} TECU")
         col_inf2.metric(label="🎯 Porcentaje de Precisión Global", value=f"{st.session_state.global_prec:.2f} %")
-        
         st.divider()
         st.markdown("""
         ### Interpretación Científica de las Desviaciones:
-        * **Error < 1.0 TECU:** Predicción de alta confianza. Ideal para operaciones de posicionamiento de alta precisión (RTK).
-        * **Error entre 1.0 y 2.5 TECU:** Desviación moderada, usualmente causada por fluctuaciones térmicas diurnas normales en la ionosfera.
-        * **Error > 2.5 TECU:** Inestabilidad en la predicción. Ocurre comúnmente durante el inicio de tormentas solares o fenómenos de cintilación geomagnética imprevistos.
+        * **Error < 1.0 TECU:** Predicción de alta confianza. Ideal para operaciones RTK de alta precisión.
+        * **Error entre 1.0 y 2.5 TECU:** Desviación moderada, usualmente causada por fluctuaciones térmicas diurnas en la ionosfera.
+        * **Error > 2.5 TECU:** Inestabilidad en la predicción debido a tormentas solares imprevistas.
         """)
     else:
-        st.info("ℹ️ Para visualizar el informe analítico de desviaciones, ve a la pestaña **🔮 Pronóstico**, ingresa una ciudad y ejecuta un cálculo predictivo sobre una fecha pasada que contenga archivos completos de validación.")
+        st.info("ℹ️ Para visualizar las desviaciones, ejecuta un cálculo predictivo válido sobre una fecha pasada en la pestaña **🔮 Pronóstico**.")
