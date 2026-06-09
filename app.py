@@ -10,55 +10,8 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from scipy.interpolate import RegularGridInterpolator
 import streamlit as st
 
-# Configuración de la página web con icono y diseño optimizados
-st.set_page_config(
-    page_title="Portal de Monitoreo Ionosférico", 
-    page_icon="🛰️", 
-    layout="wide"
-)
-
-# INYECCIÓN CSS: Animación personalizada de la Tierra rotando desde el Polo Norte
-st.markdown("""
-<style>
-@keyframes rotatePolar {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-.polar-earth-loader {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    border: 3px double #1e88e5;
-    background: radial-gradient(circle, #0d47a1 10%, #00e676 60%, #e3f2fd 90%);
-    position: relative;
-    box-shadow: 0 0 15px rgba(33, 150, 243, 0.5);
-    margin: 10px auto;
-}
-.polar-earth-loader::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background-image: repeating-conic-gradient(from 0deg, rgba(255,255,255,0.4) 0deg 30deg, transparent 30deg 60deg);
-    border-radius: 50%;
-    animation: rotatePolar 3s linear infinite;
-}
-.polar-earth-loader::after {
-    content: '❄️';
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 14px;
-}
-.loader-container {
-    text-align: center;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    border-left: 5px solid #1e88e5;
-    margin-bottom: 20px;
-}
-</style>
-""", unsafe_allow_html=True)
+# Configuración de la página web limpia
+st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
 # CONFIGURACIÓN GLOBAL
@@ -111,7 +64,6 @@ if 'global_mae' not in st.session_state:
     st.session_state.global_prec = None
     st.session_state.global_ciudad_analizada = ""
 
-# REGENERADOR ESTABLE DE ENLACES CON REGLA ESTRICTA DE MARGEN DE TIEMPO DEL DLR
 def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
     str_anio = fecha_fin.strftime("%Y")
@@ -209,21 +161,16 @@ with tab2:
     url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
     if st.button("🚀 Cargar Mapa Histórico"):
-        # LLAMADA AL LOADER DE LA TIERRA ROTANDO EN POLAR
-        placeholder_load = st.empty()
-        placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Sincronizando Malla Geomagnética Histórica con el DLR...</p></div>', unsafe_allow_html=True)
-        headers = {"User-Agent": "Mozilla/5.0"}
-        try:
-            response = requests.get(url_pasado, headers=headers, timeout=12)
-            response.raise_for_status() 
-            vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
-            st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
-            st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
-            placeholder_load.empty()
-            st.success("📌 Archivo cargado correctamente.")
-        except Exception:
-            placeholder_load.empty()
-            st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
+        with st.spinner("Sincronizando Malla Geomagnética Histórica con el DLR..."):
+            headers = {"User-Agent": "Mozilla/5.0"}
+            try:
+                response = requests.get(url_pasado, headers=headers, timeout=12)
+                response.raise_for_status() 
+                vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
+                st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
+                st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
+                st.success("📌 Archivo cargado correctamente.")
+            except Exception: st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
 
     if st.session_state.matriz_pasado is not None:
         st.divider()
@@ -271,42 +218,39 @@ with tab3:
         num_dias_sel = col_c3.slider("Número de días a evaluar:", 2, 15, 10, key="ev_num_dias")
 
         if st.button("🚀 Procesar Rango de Días"):
-            placeholder_load = st.empty()
-            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Extrayendo Bloques Temporales del Servidor DLR...</p></div>', unsafe_allow_html=True)
-            headers = {"User-Agent": "Mozilla/5.0"}
-            temp_etiquetas, temp_3d = [], np.zeros((num_dias_sel, 43, 81))
-            exito_total = True
+            with st.spinner("Extrayendo Bloques Temporales del Servidor DLR..."):
+                headers = {"User-Agent": "Mozilla/5.0"}
+                temp_etiquetas, temp_3d = [], np.zeros((num_dias_sel, 43, 81))
+                exito_total = True
 
-            for d in range(num_dias_sel):
-                fecha_actual = datetime.datetime(fecha_inicial.year, fecha_inicial.month, fecha_inicial.day) + datetime.timedelta(days=d)
-                link_exitoso = False
-                for m in MINUTOS_CONTIGUOS_GLOBAL:
-                    url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
-                    try:
-                        response = requests.get(url_intento, headers=headers, timeout=4)
-                        if response.status_code == 200:
-                            data = response.json()
-                            link_exitoso, minuto_exitoso = True, m
-                            break
-                    except Exception: pass
+                for d in range(num_dias_sel):
+                    fecha_actual = datetime.datetime(fecha_inicial.year, fecha_inicial.month, fecha_inicial.day) + datetime.timedelta(days=d)
+                    link_exitoso = False
+                    for m in MINUTOS_CONTIGUOS_GLOBAL:
+                        url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
+                        try:
+                            response = requests.get(url_intento, headers=headers, timeout=4)
+                            if response.status_code == 200:
+                                data = response.json()
+                                link_exitoso, minuto_exitoso = True, m
+                                break
+                        except Exception: pass
 
-                if not link_exitoso:
-                    placeholder_load.empty()
-                    st.error(f"❌ Sin datos para el día {fecha_actual.strftime('%d/%m/%Y')}.")
-                    exito_total = False
-                    break
+                    if not link_exitoso:
+                        st.error(f"❌ Sin datos para el día {fecha_actual.strftime('%d/%m/%Y')}.")
+                        exito_total = False
+                        break
 
-                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                temp_3d[d, :, :] = np.array(vtec_values_list).reshape(43, 81)
-                temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} ({hora_fija_sel:02d}:{minuto_exitoso:02d})")
+                    vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                    temp_3d[d, :, :] = np.array(vtec_values_list).reshape(43, 81)
+                    temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} ({hora_fija_sel:02d}:{minuto_exitoso:02d})")
 
-            placeholder_load.empty()
-            if exito_total:
-                st.session_state.historial_vtec_3d = temp_3d
-                st.session_state.etiquetas_fechas_reales = temp_etiquetas
-                st.session_state.limites_globales = (max(0.0, float(np.floor(np.min(temp_3d) - 2))), float(np.ceil(np.max(temp_3d) + 2)))
-                st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                st.success("📊 Rango temporal procesado.")
+                if exito_total:
+                    st.session_state.historial_vtec_3d = temp_3d
+                    st.session_state.etiquetas_fechas_reales = temp_etiquetas
+                    st.session_state.limites_globales = (max(0.0, float(np.floor(np.min(temp_3d) - 2))), float(np.ceil(np.max(temp_3d) + 2)))
+                    st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
+                    st.success("📊 Rango temporal procesado.")
 
         if st.session_state.historial_vtec_3d is not None:
             v_min, v_max = st.session_state.limites_globales
@@ -371,41 +315,38 @@ with tab3:
         fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
         if st.button("🚀 Procesar las 24 Horas"):
-            placeholder_load = st.empty()
-            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Escaneando Ciclos Diurnos Horarios (24 Frames)...</p></div>', unsafe_allow_html=True)
-            headers = {"User-Agent": "Mozilla/5.0"}
-            h_temp_etiquetas, h_temp_3d = [], np.zeros((24, 43, 81))
-            h_exito_total = True
+            with st.spinner("Escaneando Ciclos Diurnos Horarios (24 Frames)..."):
+                headers = {"User-Agent": "Mozilla/5.0"}
+                h_temp_etiquetas, h_temp_3d = [], np.zeros((24, 43, 81))
+                h_exito_total = True
 
-            for h in range(24):
-                link_exitoso = False
-                for m in MINUTOS_CONTIGUOS_GLOBAL:
-                    url_intento = generar_enlace_dlr_seguro(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
-                    try:
-                        response = requests.get(url_intento, headers=headers, timeout=4)
-                        if response.status_code == 200:
-                            data = response.json()
-                            link_exitoso, minuto_exitoso = True, m
-                            break
-                    except Exception: pass
+                for h in range(24):
+                    link_exitoso = False
+                    for m in MINUTOS_CONTIGUOS_GLOBAL:
+                        url_intento = generar_enlace_dlr_seguro(fecha_analisis_h.year, fecha_analisis_h.month, fecha_analisis_h.day, h, m)
+                        try:
+                            response = requests.get(url_intento, headers=headers, timeout=4)
+                            if response.status_code == 200:
+                                data = response.json()
+                                link_exitoso, minuto_exitoso = True, m
+                                break
+                        except Exception: pass
 
-                if not link_exitoso:
-                    placeholder_load.empty()
-                    st.error(f"❌ Error en hora {h:02d}. Cancelado.")
-                    h_exito_total = False
-                    break
+                    if not link_exitoso:
+                        st.error(f"❌ Error en hora {h:02d}. Cancelado.")
+                        h_exito_total = False
+                        break
 
-                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                h_temp_3d[h, :, :] = np.array(vtec_values_list).reshape(43, 81)
-                h_temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
+                    vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                    h_temp_3d[h, :, :] = np.array(vtec_values_list).reshape(43, 81)
+                    h_temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
 
-            placeholder_load.empty()
-            if h_exito_total:
-                st.session_state.h_historial_vtec_3d = h_temp_3d
-                st.session_state.h_etiquetas_reales = h_temp_etiquetas
-                st.session_state.h_limites_globales = (max(0.0, float(np.floor(np.min(h_temp_3d) - 2))), float(np.ceil(np.max(h_temp_3d) + 2)))
-                st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
-                st.success("📊 Completado.")
+                if h_exito_total:
+                    st.session_state.h_historial_vtec_3d = h_temp_3d
+                    st.session_state.h_etiquetas_reales = h_temp_etiquetas
+                    st.session_state.h_limites_globales = (max(0.0, float(np.floor(np.min(h_temp_3d) - 2))), float(np.ceil(np.max(h_temp_3d) + 2)))
+                    st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
+                    st.success("📊 Completado.")
 
         if st.session_state.h_historial_vtec_3d is not None:
             vh_min, vh_max = st.session_state.h_limites_globales
@@ -461,7 +402,7 @@ with tab3:
                 plt.close(fig_lineas_h)
 
 # =====================================================================
-# PESTAÑA 4: PRONÓSTICO (UNIFICADO Y CORREGIDO 100%)
+# PESTAÑA 4: PRONÓSTICO (ESTABILIZADO AUTOMÁTICO ANTI-NAN)
 # =====================================================================
 with tab4:
     st.title("🔮 Predicción Científica del VTEC Ionosférico")
@@ -471,6 +412,13 @@ with tab4:
     fecha_base_pr = col_p1.date_input("Fecha Base del Historial:", datetime.date(2026, 1, 10), key="pr_date")
     ventana_hist_pr = col_p2.slider("Ventana de historial previo (Días):", 1, 15, 3, key="pr_hist_days")
     horizonte_pr = col_p3.radio("Horizonte de Predicción a calcular:", ["1 Hora", "3 Horas", "6 Horas"], index=2, horizontal=True)
+
+    if ventana_hist_pr < 5:
+        st.warning(f"⚠️ **Aviso de Fiabilidad [BAJA]:** Ventana de **{ventana_hist_pr} días** seleccionada. El modelo calculará las ondas bihorarias en formato adaptado de paso corto igual que en Colab. Se recomienda usar rangos altos para promediar perturbaciones solares.")
+    elif 5 <= ventana_hist_pr < 10:
+        st.info(f"ℹ️ **Aviso de Fiabilidad [MODERADA]:** Historial de **{ventana_hist_pr} días** configurado. Idóneo para condiciones estables de clima espacial.")
+    else:
+        st.success(f"🎯 **Aviso de Fiabilidad [ÓPTIMA]:** Densidad de matriz perfecta de **{ventana_hist_pr} días**. Máximo rendimiento del predictor estacional.")
 
     with st.form("form_pronostico_ciudad"):
         ciudad_pronostico = st.text_input("Ingresa la ciudad o coordenadas a estudiar:", "Madrid")
@@ -486,39 +434,35 @@ with tab4:
             idx_lat = (np.abs(lats_vector - lat_pr)).argmin()
             idx_lon = (np.abs(lons_vector - lon_pr)).argmin()
 
-            placeholder_load = st.empty()
-            placeholder_load.markdown('<div class="loader-container"><div class="polar-earth-loader"></div><p>Computando Tendencias Estacionales Bihorarias en el Polo...</p></div>', unsafe_allow_html=True)
-
             headers = {"User-Agent": "Mozilla/5.0"}
             horas_escanear = range(0, 24, 2)
             cronologia_vtec, fechas_eje_datetime = [], []
             fecha_base_dt = datetime.datetime(fecha_base_pr.year, fecha_base_pr.month, fecha_base_pr.day)
             exito_past = True
 
-            # Fase 1: Descarga Estricta del Pasado
-            for dia_offset in range(ventana_hist_pr):
-                fecha_actual = fecha_base_dt + datetime.timedelta(days=dia_offset)
-                for hora_actual in horas_escanear:
-                    link_exitoso = False
-                    for m in [0, 5, 10, 15]:
-                        url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
-                        try:
-                            response = requests.get(url_intento, headers=headers, timeout=3)
-                            if response.status_code == 200:
-                                data = response.json()
-                                link_exitoso = True
-                                break
-                        except Exception: pass
-                    if not link_exitoso:
-                        placeholder_load.empty()
-                        st.error(f"❌ Historial incompleto para el día {fecha_actual.strftime('%d/%m')} a las {hora_actual:02d}h.")
-                        exito_past = False
-                        break
-                if not exito_past: break
-                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                matriz_instante = np.array(vtec_values_list).reshape(43, 81)
-                cronologia_vtec.append(matriz_instante[idx_lat, idx_lon])
-                fechas_eje_datetime.append(fecha_actual + datetime.timedelta(hours=hora_actual))
+            with st.spinner("Procesando histórico matemático de radio..."):
+                for dia_offset in range(ventana_hist_pr):
+                    fecha_actual = fecha_base_dt + datetime.timedelta(days=dia_offset)
+                    for hora_actual in horas_escanear:
+                        link_exitoso = False
+                        for m in [0, 5, 10, 15]:
+                            url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_actual, m)
+                            try:
+                                response = requests.get(url_intento, headers=headers, timeout=3)
+                                if response.status_code == 200:
+                                    data = response.json()
+                                    link_exitoso = True
+                                    break
+                            except Exception: pass
+                        if not link_exitoso:
+                            st.error(f"❌ Historial incompleto para el día {fecha_actual.strftime('%d/%m')} a las {hora_actual:02d}h.")
+                            exito_past = False
+                            break
+                    if not exito_past: break
+                    vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                    matriz_instante = np.array(vtec_values_list).reshape(43, 81)
+                    cronologia_vtec.append(matriz_instante[idx_lat, idx_lon])
+                    fechas_eje_datetime.append(fecha_actual + datetime.timedelta(hours=hora_actual))
 
             if exito_past:
                 vector_vtec_serie = np.array(cronologia_vtec)
@@ -538,7 +482,6 @@ with tab4:
                     slot_futuro = (ultimo_slot_horario + k) % periodo
                     vector_prediccion_futura.append(perfil_estacional[slot_futuro] + anomalia_inicial * (0.85 ** k))
 
-                # Fase 2: Descarga del Futuro Real para Validación (URLs Arregladas)
                 cronologia_real_future, fechas_real_future = [], []
                 fecha_validacion_base = fecha_base_dt + datetime.timedelta(days=ventana_hist_pr)
 
@@ -557,14 +500,10 @@ with tab4:
                     if not link_exitoso: cronologia_real_future.append(None)
                     fechas_real_future.append(fecha_validacion_base + datetime.timedelta(hours=hora_val))
 
-                placeholder_load.empty()
-
-                # --- FILTRADO DE SEGURIDAD PARA LIMITES DE MATPLOTLIB ---
+                # --- PROTECCIÓN ABSOLUTA ELÁSTICA CON NUMPY NAN ---
+                # Removemos los None/NaN antes de pasarlos a Matplotlib para asegurar inmunidad total
                 real_futuro_filtrado = [v for v in cronologia_real_future if v is not None]
-                datos_seguros_grafica = list(vector_vtec_serie[-12:]) + list(vector_prediccion_futura) + real_futuro_filtrado
-
-                Y_MIN_VAL = max(0.0, float(np.floor(np.min(datos_seguros_grafica) - 2)))
-                Y_MAX_VAL = float(np.ceil(np.max(datos_seguros_grafica) + 2))
+                datos_totales_limpios = list(vector_vtec_serie[-12:]) + list(vector_prediccion_futura) + real_futuro_filtrado
 
                 st.subheader(f"📊 Gráfica de Pronóstico en {ciudad_pronostico.capitalize()}")
                 fig_pr, ax_pr = plt.subplots(figsize=(14, 5.5), dpi=100)
@@ -578,11 +517,14 @@ with tab4:
                     st.session_state.global_prec = max(0.0, 100 - (st.session_state.global_mae / np.mean(cronologia_real_future)) * 100)
                     st.session_state.global_ciudad_analizada = ciudad_pronostico.capitalize()
                 else:
-                    st.caption("ℹ️ Línea de validación real omitida: Los archivos futuros no están disponibles en el DLR.")
+                    st.caption("ℹ️ Ventana de validación asíncrona: No hay datos reales en el servidor para contrastar este instante.")
                     st.session_state.global_mae = None
 
                 ax_pr.grid(True, linestyle='--', alpha=0.5)
-                ax_pr.set_ylim(Y_MIN_VAL, Y_MAX_VAL)
+                
+                # REEMPLAZO DINÁMICO REFORZADO AUTOMÁTICO +-2 CON RESISTENCIA NAN
+                ax_pr.set_ylim(max(0.0, float(np.nanmin(datos_totales_limpios) - 2)), float(np.nanmax(datos_totales_limpios) + 2))
+                
                 ax_pr.xaxis.set_major_locator(mdates.HourLocator(interval=2))
                 ax_pr.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m\n%H:%M'))
                 ax_pr.legend(loc='upper left')
@@ -594,7 +536,7 @@ with tab4:
 # =====================================================================
 with tab5:
     st.title("📉 Informe Analítico de Desviaciones del Modelo")
-    st.write("Analiza el margen de error y la fiabilidad del algoritmo predictivo autorregresivo.")
+    st.write("Analiza de forma estadística el margen de error y la fiabilidad del algoritmo predictivo autorregresivo.")
     
     if st.session_state.global_mae is not None:
         st.success(f"### 📍 Último Análisis guardado: {st.session_state.global_ciudad_analizada}")
@@ -606,7 +548,7 @@ with tab5:
         ### Interpretación Científica de las Desviaciones:
         * **Error < 1.0 TECU:** Predicción de alta confianza. Ideal para operaciones RTK de alta precisión.
         * **Error entre 1.0 y 2.5 TECU:** Desviación moderada, usualmente causada por fluctuaciones térmicas diurnas en la ionosfera.
-        * **Error > 2.5 TECU:** Inestabilidad en la predicción debido a tormentas solares imprevistas.
+        * **Error > 2.5 TECU:** Inestabilidad en la predicción debido a tormentas solares imprevistas o escasez de datos en la ventana del historial previo.
         """)
     else:
         st.info("ℹ️ Para visualizar las desviaciones, ejecuta un cálculo predictivo válido sobre una fecha pasada en la pestaña **🔮 Pronóstico**.")
