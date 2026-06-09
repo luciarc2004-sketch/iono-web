@@ -306,8 +306,9 @@ with tab3:
             base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
             return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
 
-        if st.button("🚀 Processar Rango de Días"):
+        if st.button("🚀 Procesar Rango de Días"):
             headers = {"User-Agent": "Mozilla/5.0"}
+            # CORRECCIÓN DE POSICIÓN: Se declara la lista de minutos antes del bucle de red para evitar el NameError
             minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
             
             temp_etiquetas = []
@@ -321,7 +322,7 @@ with tab3:
                 data = None
                 minuto_exitoso = 0
 
-                for m in minutes_contiguos:
+                for m in minutos_contiguos:
                     url_intento = generar_enlace_dlr_rango(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
