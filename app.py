@@ -130,7 +130,6 @@ with tab1:
         grid_lon_eur, grid_lat_eur = np.meshgrid(lons_eur, lats_eur)
         map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
         
-        # LINEA ENVOLVENTE SEGURA PARA EVITAR EL TRUNCADO (EUROPA)
         cbar_eur = fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7)
         cbar_eur.set_label('VTEC EUROPA (TECU)', weight='bold')
 
@@ -144,7 +143,6 @@ with tab1:
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', zorder=2)
         
-        # LINEA ENVOLVENTE SEGURA CORREGIDA AQUÍ (GLOBAL)
         cbar_glb = fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7)
         cbar_glb.set_label('VTEC GLOBAL (TECU)', weight='bold')
 
@@ -153,45 +151,43 @@ with tab1:
         st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO 
+# PESTAÑA 2: ANÁLISIS EN EL PASADO (ESTABLE CON STATE)
 # =====================================================================
 with tab2:
     st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
     st.write("Selecciona una fecha y una hora histórica. El sistema buscará en los repositorios oficiales del DLR.")
 
-    # Selectores de fecha y hora interactivos
+    # Inicializar la matriz en el estado de sesión para que no se borre al escribir la ciudad
+    if 'matriz_pasado' not in st.session_state:
+        st.session_state.matriz_pasado = None
+    if 'fecha_mapa' not in st.session_state:
+        st.session_state.fecha_mapa = ""
+
     col_f1, col_f2, col_f3 = st.columns(3)
     fecha_sel = col_f1.date_input("Selecciona la Fecha:", datetime.date(2026, 1, 24))
     hora_sel = col_f2.slider("Hora (UTC):", 0, 23, 4)
     minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5)
 
-    # Redondeo forzado automático para evitar links rotos
     minuto_ajustado = (minuto_sel // 15) * 15
     if minuto_ajustado != minuto_sel:
-        st.caption(f"ℹ️ Los datos se aproximaron automáticamente al bloque válido más cercano del DLR: **{hora_sel:02d}:{minuto_ajustado:02d} UTC**.")
+        st.caption(f"ℹ️ Los datos se aproximarán automáticamente al bloque de 15 min: **{hora_sel:02d}:{minuto_ajustado:02d} UTC**.")
 
-    # Generación dinámica del link histórico
     def generar_enlace_dlr_pasado(anio, mes, dia, hora, minuto):
         fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
         str_anio = fecha_fin.strftime("%Y")
         str_doy = fecha_fin.strftime("%j")
         str_hora = fecha_fin.strftime("%H")
-
         fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
         timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
         timestamp_fin = fecha_fin.strftime("%Y-%m-%dT%H-%M-%S")
-
         base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        nombre_archivo = f"DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/{nombre_archivo}"
+        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
 
     url_pasado = generar_enlace_dlr_pasado(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    # Botón ejecutor
     if st.button("🚀 Cargar Mapa Histórico de Europa"):
         headers = {"User-Agent": "Mozilla/5.0"}
-        
-        with st.spinner("Conectando y validando base de datos histórica del DLR..."):
+        with st.spinner("Descargando base de datos histórica del DLR..."):
             try:
                 response = requests.get(url_pasado, headers=headers, timeout=12)
                 response.raise_for_status() 
@@ -202,53 +198,54 @@ with tab2:
                     for feature in data_p['data']['grid']['features']:
                         vtec_p_list.append(feature['properties']['vtec_assimilated_tecu'])
 
-                # Protección estricta contra archivos corruptos/vacíos
                 if len(vtec_p_list) != 3483:
-                    st.error("🚨 Alarma: El archivo de esta fecha no cumple con la estructura de 3483 puntos.")
+                    st.error("🚨 El archivo de esta fecha está corrupto o incompleto.")
                 else:
-                    matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
-                    lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
+                    st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
+                    st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
+                    st.success(f"📌 Archivo de la fecha {st.session_state.fecha_mapa} cargado correctamente.")
+            except Exception:
+                st.error(f"❌ No existen registros en el DLR para la fecha/hora {hora_sel:02d}:{minuto_ajustado:02d} del {fecha_sel.strftime('%d/%m/%Y')}.")
 
-                    st.success(f"📌 Archivo validado y descargado con éxito.")
+    # ZONA DE CONSULTA Y MAPA (FUERA DEL BOTÓN - RESISTENTE A REFRESH)
+    if st.session_state.matriz_pasado is not None:
+        st.divider()
+        st.markdown(f"### 🔍 Consulta de Localidad en el Pasado ({st.session_state.fecha_mapa})")
+        localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid", key="loc_pasada")
+        
+        lons_p, lats_p = np.arange(-30, 51, 1), np.arange(30, 73, 1)
 
-                    # --- SECCIÓN CONSULTA LOCALIDAD PASADA ---
-                    st.markdown("### 🔍 Consulta de Localidad en esta Fecha")
-                    localidad_p_usuario = st.text_input("Ingresa una ciudad para conocer su TECU histórico:", "Madrid", key="loc_pasada")
-                    
-                    if localidad_p_usuario:
-                        lat_p, lon_p, _ = geocodificar_localidad(localidad_p_usuario)
-                        if lat_p is not None and (30 <= lat_p <= 72) and (-30 <= lon_p <= 50):
-                            interp_p = RegularGridInterpolator((lats_p, lons_p), matriz_pasado, method='linear', bounds_error=False, fill_value=None)
-                            val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
-                            st.metric(label=f"Valor en {localidad_p_usuario.capitalize()} ({fecha_sel.strftime('%d/%m/%Y')})", value=f"{val_tecu_p:.3f} TECU")
-                        else:
-                            st.warning("La localidad indicada está fuera del rango de cobertura de Europa (-30° a 50° Lon, 30° a 72° Lat).")
+        if localidad_p_usuario:
+            lat_p, lon_p, _ = geocodificar_localidad(localidad_p_usuario)
+            if lat_p is not None and (30 <= lat_p <= 72) and (-30 <= lon_p <= 50):
+                interp_p = RegularGridInterpolator((lats_p, lons_p), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
+                val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
+                st.metric(label=f"Valor en {localidad_p_usuario.capitalize()}", value=f"{val_tecu_p:.3f} TECU")
+            else:
+                st.warning("La localidad indicada está fuera del rango de cobertura de Europa (-30° a 50° Lon, 30° a 72° Lat).")
 
-                    # --- RENDERIZADO DEL MAPA HISTÓRICO ---
-                    st.markdown("### 🗺️ Malla Regional de Europa de la Fecha Seleccionada")
-                    fig_p = plt.figure(figsize=(12, 7), dpi=100)
-                    ax_p = plt.axes(projection=ccrs.PlateCarree())
-                    ax_p.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-                    
-                    ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-                    ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                    ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.2, zorder=3)
-                    ax_p.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
-                    
-                    grid_p = ax_p.gridlines(draw_labels=True, color='gray', alpha=0.3, linestyle='--')
-                    grid_p.top_labels, grid_p.right_labels = False, False
-                    
-                    grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
-                    mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
-                    
-                    cbar_p = plt.colorbar(mapa_p, ax=ax_p, orientation='vertical', pad=0.02, shrink=0.8)
-                    cbar_p.set_label('VTEC ASSIMILATED (TECU)', weight='bold')
-                    
-                    plt.title(f"MAPA DE TEC RECONSTRUIDO\nFECHA: {fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC", fontsize=11, weight='bold')
-                    st.pyplot(fig_p)
-
-            except Exception as e:
-                st.error(f"❌ No existen registros en el servidor central del DLR para la fecha/hora solicitada, o el servidor externo no responde. Ajusta los parámetros e inténtalo de nuevo.")
+        # RENDERIZADO DEL MAPA HISTÓRICO
+        st.markdown("### 🗺️ Malla Regional de Europa Reconstruida")
+        fig_p = plt.figure(figsize=(11, 6), dpi=100)
+        ax_p = plt.axes(projection=ccrs.PlateCarree())
+        ax_p.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+        
+        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
+        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.2, zorder=3)
+        ax_p.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#666666', zorder=3)
+        
+        grid_p = ax_p.gridlines(draw_labels=True, color='gray', alpha=0.3, linestyle='--')
+        grid_p.top_labels, grid_p.right_labels = False, False
+        
+        grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
+        mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', zorder=2)
+        
+        cbar_p = plt.colorbar(mapa_p, ax=ax_p, orientation='vertical', pad=0.02, shrink=0.8)
+        cbar_p.set_label('VTEC ASSIMILATED (TECU)', weight='bold')
+        
+        plt.title(f"MAPA DE TEC RECONSTRUIDO\nFECHA: {st.session_state.fecha_mapa}", fontsize=11, weight='bold')
+        st.pyplot(fig_p)
 
 # =====================================================================
 # PESTAÑA 3: HERRAMIENTAS GNSS (ESPACIO PREPARADO)
