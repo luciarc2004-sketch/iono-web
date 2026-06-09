@@ -1,4 +1,3 @@
-
 import streamlit as st
 import datetime
 import requests
@@ -6,11 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+from scipy.interpolate import RegularGridInterpolator
 from geopy.geocoders import Nominatim
-import matplotlib.dates as mdates
 
 # =====================================================================
-# CONFIGURACIÓN PROFESIONAL DE LA PLATAFORMA WEB
+# CONFIGURACIÓN DE LA PLATAFORMA WEB
 # =====================================================================
 st.set_page_config(
     page_title="Iono-Explorer Pro GNSS",
@@ -19,341 +19,230 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# INTERFAZ FORMAL: Deep Space Command (Negro Absoluto y Azul)
+# INYECCIÓN CSS: Tema Formal "Deep Space Command"
 st.markdown("""
     <style>
+    /* Fondo de la pantalla principal y textos generales */
     .main { background-color: #000000; color: #cbd5e1; }
+    
+    /* Configuración de títulos y subtítulos */
     .stHeading h1, .stHeading h2, .stHeading h3 { color: #3b82f6 !important; }
+    
+    /* Panel Lateral (Sidebar) */
     section[data-testid="stSidebar"] { background-color: #050505 !important; border-right: 1px solid #1e3a8a; }
     section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] label { color: #94a3b8 !important; }
-    div[data-testid="stMetricValue"] { color: #06b6d4 !important; font-family: monospace; }
+    
+    /* Cuadro de Métricas (Valores en Cian) */
+    div[data-testid="stMetricValue"] { color: #06b6d4 !important; font-family: monospace; font-size: 2rem !important; }
     div[data-testid="stMetricLabel"] { color: #94a3b8 !important; }
+    
+    /* Botones Interactivos */
     .stButton>button {
         background-color: #1e3a8a; color: #ffffff; border-radius: 6px;
         border: 1px solid #3b82f6; font-weight: bold; width: 100%; transition: all 0.3s ease;
     }
-    .stButton>button:hover { background-color: #2563eb; border-color: #60a5fa; }
+    .stButton>button:hover { background-color: #2563eb; border-color: #60a5fa; color: #ffffff; }
+    
+    /* Cajas de Alerta y Consolas */
     .stAlert { background-color: #0b1329 !important; color: #60a5fa !important; border: 1px solid #1e3a8a !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# Base de datos interna de respaldo para evitar bloqueos del geolocalizador en la nube
-CAPITALES_BACKUP = {
-    "madrid": (40.4167, -3.7037), "barcelona": (41.3851, 2.1734), "sevilla": (37.3891, -5.9845),
-    "berlin": (52.5200, 13.4050), "paris": (48.8566, 2.3522), "londres": (51.5074, -0.1278),
-    "roma": (41.9028, 12.4964), "bruselas": (50.8503, 4.3517), "lisboa": (38.7223, -9.1393)
-}
+# Excepción personalizada para el control de errores en la nube
+class AlarmaDatosFalsosError(Exception):
+    pass
 
 # =====================================================================
-# MOTOR CORE DE DATOS CON COMPROBACIÓN ESTRICTA ANTI-DATOS FALSOS
+# MOTORES CORE DE DESCARGA DE ENLACES (DLR)
 # =====================================================================
-def generar_enlace_dlr(fecha):
+def generar_enlace_dlr_europa(fecha):
     str_anio = fecha.strftime("%Y")
     str_doy = fecha.strftime("%j")
     str_hora = fecha.strftime("%H")
     f_inicio = fecha - datetime.timedelta(minutes=4, seconds=30)
     ts_inicio = f_inicio.strftime("%Y-%m-%dT%H-%M-%S")
     ts_fin = fecha.strftime("%Y-%m-%dT%H-%M-%S")
-    base = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-    return f"{base}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{ts_inicio}_{ts_fin}_{str_doy}_D.json"
+    base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
+    nombre_archivo = f"DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{ts_inicio}_{ts_fin}_{str_doy}_D.json"
+    return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/{nombre_archivo}"
 
-@st.cache_data(show_spinner=False, ttl=3600)
-def descargar_json_dlr(fecha):
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+@st.cache_data(show_spinner=False, ttl=1800)
+def descargar_datos_sistemas(fecha):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    # 1. Descarga e inspección de la Malla Regional de Europa
+    matriz_eur, f_valida_eur = None, None
     for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]:
         f_intento = fecha.replace(minute=m)
-        url = generar_enlace_dlr(f_intento)
+        url_europa = generar_enlace_dlr_europa(f_intento)
         try:
-            r = requests.get(url, headers=headers, timeout=4)
+            r = requests.get(url_europa, headers=headers, timeout=5)
             if r.status_code == 200:
                 data = r.json()
                 if 'data' in data and 'grid' in data['data'] and 'features' in data['data']['grid']:
                     vtec_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                    if len(vtec_list) == 3483: # Malla Europa Certificada (43x81)
-                        return np.array(vtec_list).reshape(43, 81), f_intento
+                    if len(vtec_list) == 3483: # 43 filas x 81 columnas
+                        matriz_eur = np.array(vtec_list).reshape(43, 81)
+                        f_valida_eur = f_intento
+                        break
         except: continue
-    return None, None
+
+    # 2. Descarga e inspección de la Malla Planetaria Global (Latest)
+    matriz_glb = None
+    url_global = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL_latest_D.json"
+    try:
+        r = requests.get(url_global, headers=headers, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            if 'data' in data and 'grid' in data['data'] and 'features' in data['data']['grid']:
+                vtec_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                if len(vtec_list) == 5329: # 73 x 73 puntos
+                    matriz_glb = np.array(vtec_list).reshape(73, 73)
+    except: pass
+
+    return matriz_eur, matriz_glb, f_valida_eur
 
 # =====================================================================
-# INTERFAZ DE USUARIO (BARRA LATERAL DE CONTROL OPERACIONAL)
+# INTERFAZ DE USUARIO: BARRA LATERAL (CONTROL DE TIEMPO)
 # =====================================================================
-st.sidebar.title("🛰️ Control Operacional")
+st.sidebar.title("🛰️ Centro de Control")
 st.sidebar.markdown("---")
+st.sidebar.subheader("⏰ Temporizador de Consulta")
+fecha_seleccionada = st.sidebar.date_input("Fecha Base (Europa)", datetime.date(2026, 1, 24))
+hora_seleccionada = st.sidebar.slider("Hora de Observación (UTC)", 0, 23, 4)
 
-version_seleccionada = st.sidebar.selectbox(
-    "Selecciona la Herramienta",
-    ["1. Versión por Horas (Mapas 24h)", "2. Versión Matemática (Predicción vs Realidad)", "3. Versión por Constelaciones (Error Local)"]
-)
+fecha_combinada = datetime.datetime.combine(fecha_seleccionada, datetime.time(hora_seleccionada, 0))
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("📍 Parámetros Geográficos")
-ciudad_user = st.sidebar.text_input("Introduce Localidad", "Madrid")
+# Ejecutar descargas automáticas protegidas en memoria caché
+matriz_eur, matriz_glb, fecha_real_eur = descargar_datos_sistemas(fecha_combinada)
 
-lats_vector = np.arange(30, 73, 1)
-lons_vector = np.arange(-30, 51, 1)
-grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
+# =====================================================================
+# PANEL PRINCIPAL: INTRODUCCIÓN CIENTÍFICA e INTERFAZ DE INICIO
+# =====================================================================
+st.title("🖥️ Plataforma de Monitoreo Ionosférico Global Pro")
+st.markdown("Auditoría espacial y análisis de retraso de grupo en tiempo real.")
 
-# RESOLUCIÓN GEOGRÁFICA HÍBRIDA EVITA-BLOQUEOS
-c_lat, c_lon = None, None
-geolocator = Nominatim(user_agent="iono_explorer_pro_command_v5")
-try:
-    location = geolocator.geocode(ciudad_user, timeout=5)
-    if location:
-        c_lat, c_lon = location.latitude, location.longitude
-except:
-    pass
+# Sección Informativa Básica
+with st.expander("📖 Glosario Técnico: ¿Qué estamos midiendo? (Conceptos Clave)", expanded=False):
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### 🌌 La Ionosfera")
+        st.write("Es una capa de la atmósfera terrestre (situada entre los 80 y los 600 km de altitud) que se encuentra permanentemente ionizada debido a la radiación solar. Contiene una gran cantidad de electrones libres que interactúan directamente con las ondas de radio.")
+        st.markdown("### 📡 Contenido Total de Electrones (TEC)")
+        st.write("El TEC (Total Electron Content) mide la cantidad total de electrones libres presentes en un cilindro de sección transversal de 1 $m^2$ a lo largo de la trayectoria que recorre la señal desde el satélite hasta el receptor en tierra.")
+    with c2:
+        st.markdown("### 🧮 La Unidad TECU")
+        st.write("Es la unidad de medida estándar en la física de la alta atmósfera. **1 TECU** equivale exactamente a $10^{16}$ electrones libres por metro cuadrado ($e^-/m^2$).")
+        st.markdown("### 🛠️ ¿Para qué sirve esta auditoría?")
+        st.write("Cuando las señales de los satélites (GPS, Galileo...) cruzan la ionosfera, sufren un retraso de grupo proporcional a la densidad de electrones. Este retraso deforma la medición de distancia introduciendo errores métricos en la geolocalización. Monitorear el TECU permite calcular y mitigar este desfase.")
 
-if c_lat is None:
-    ciudad_clean = ciudad_user.lower().strip()
-    if ciudad_clean in CAPITALES_BACKUP:
-        c_lat, c_lon = CAPITALES_BACKUP[ciudad_clean]
+st.markdown("---")
+
+# =====================================================================
+# SECCIÓN: CONSOLA DE CONSULTA LOCAL DE TECU
+# =====================================================================
+st.subheader("📌 Consola de Diagnóstico Local")
+localidad_user = st.text_input("Introduce cualquier municipio o ciudad del planeta (Ej: Madrid, Ciudad de México, Tokio):", "Madrid")
+
+if matriz_eur is not None and matriz_glb is not None:
+    # Vectores fijos reglamentarios de las mallas del DLR
+    lons_eur = np.arange(-30, 51, 1)
+    lats_eur = np.arange(30, 73, 1)
+    lons_glb = np.linspace(-180, 180, 73)
+    lats_glb = np.linspace(-90, 90, 73)
+
+    # Inicializar interpoladores oficiales de Scipy
+    interp_europa = RegularGridInterpolator((lats_eur, lons_eur), matriz_eur, method='linear', bounds_error=False, fill_value=None)
+    interp_global = RegularGridInterpolator((lats_glb, lons_glb), matriz_glb, method='linear', bounds_error=False, fill_value=None)
+
+    # Geolocalización de la consulta
+    geolocator = Nominatim(user_agent="iono_explorer_v6_init")
+    try:
+        loc = geolocator.geocode(localidad_user, timeout=4)
+    except:
+        loc = None
+
+    if loc:
+        lat, lon = loc.latitude, loc.longitude
+        dentro_europa = (30 <= lat <= 72) and (-30 <= lon <= 50)
+        punto_matematico = np.array([[lat, lon]])
+
+        # Lógica de decisión de malla por precisión
+        if dentro_europa:
+            valor_tecu = float(interp_europa(punto_matematico)[0])
+            fuente_txt = "Malla Regional de Europa (Alta Resolución: 1°)"
+            estado_tipo = "success"
+        else:
+            valor_tecu = float(interp_global(punto_matematico)[0])
+            fuente_txt = "Malla Planetaria Global (Resolución Estándar: 73x73)"
+            estado_tipo = "info"
+
+        # Mostrar Resultados Estructurados
+        col_m1, col_m2, col_m3 = st.columns(3)
+        col_m1.metric("Localidad Detectada", f"{loc.name.split(',')[0]}")
+        col_m2.metric("Coordenadas Radiales", f"{lat:.3f}°N, {lon:.3f}°E")
+        col_m3.metric("Densidad Ionosférica", f"{valor_tecu:.3f} TECU")
+        
+        st.markdown(f"**Fuente del dato:** `{fuente_txt}`")
     else:
-        c_lat, c_lon = 40.4167, -3.7037 # Respaldo absoluto si no se encuentra nada
-
-# Comprobación de límites de cobertura de la Malla Europa
-if not (30 <= c_lat <= 72) or not (-30 <= c_lon <= 50):
-    st.sidebar.error("❌ Fuera de cobertura del radar de Europa (Malla A). Alertas suspendidas.")
-    cobertura_valida = False
+        st.warning("⚠️ Localidad no reconocida por el servidor geográfico de respaldo. Introduce otro término.")
 else:
-    lat_idx = (np.abs(lats_vector - c_lat)).argmin()
-    lon_idx = (np.abs(lons_vector - c_lon)).argmin()
-    st.sidebar.success(f"Malla fija: Lat {lats_vector[lat_idx]}°N | Lon {lons_vector[lon_idx]}°E")
-    cobertura_valida = True
+    st.error("❌ Error de comunicación: Los repositorios de datos del DLR no están disponibles en este momento.")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("📅 Parámetros Temporales")
-fecha_user = st.sidebar.date_input("Fecha de Análisis", datetime.date(2026, 1, 24))
-hora_user = st.sidebar.slider("Hora de Sincronización Base (UTC)", 0, 23, 12)
-
-# MAPAMUNDI GLOBAL DE INTERÉS ORBITAL EN LA SIDEBAR
-st.sidebar.markdown("---")
-st.sidebar.subheader("🌍 Ubicación Orbital de la Estación")
-fig_glob, ax_glob = plt.subplots(figsize=(4, 2.5), facecolor='#050505')
-ax_glob.set_facecolor('#000000')
-ax_glob.plot([c_lon], [c_lat], color='#06b6d4', marker='o', markersize=8, markeredgecolor='white', zorder=5)
-# Límites mundiales simples
-ax_glob.set_xlim(-180, 180)
-ax_glob.set_ylim(-90, 90)
-ax_glob.axis('off')
-ax_glob.text(c_lon + 10, c_lat + 5, "STATION", color='#06b6d4', fontsize=7, weight='bold')
-# Dibujar una cuadrícula de referencia espacial simple
-for lon_line in range(-180, 180, 60): ax_glob.axvline(lon_line, color='#1e3a8a', alpha=0.1, linewidth=0.5)
-for lat_line in range(-90, 90, 30): ax_glob.axhline(lat_line, color='#1e3a8a', alpha=0.1, linewidth=0.5)
-st.sidebar.pyplot(fig_glob)
-
-FREQS_GNSS = {"GPS": 1575.42 * 1e6, "Galileo": 1575.42 * 1e6, "GLONASS": 1602.00 * 1e6, "BeiDou": 1561.10 * 1e6}
+st.markdown("---")
 
 # =====================================================================
-# ÁREA PRINCIPAL DE PRESENTACIÓN DE DATOS
+# SECCIÓN: RENDERIZADO GRÁFICO SIMULTÁNEO (EUROPA VS GLOBAL)
 # =====================================================================
-st.title("🖥️ Iono-Explorer Pro: Terminal de Auditoría Atmosférica")
-st.markdown("Plataforma analítica de refracción ionosférica para sistemas globales de navegación.")
+st.subheader("🗺️ Cartografía Espacial Unificada (Visualización Perpendicular)")
 
-if not cobertura_valida:
-    st.warning("⚠️ Introduce una localidad válida dentro del espacio euroatlántico en la barra lateral.")
+if matriz_eur is not None and matriz_glb is not None:
+    with st.spinner("Generando matrices cartográficas en entorno oscuro..."):
+        # Crear lienzo dual integrado con el fondo negro de la web
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7.5), dpi=100, facecolor='#000000',
+                                       subplot_kw={'projection': ccrs.PlateCarree()})
+
+        # --- MAPA 1: ENTORNO REGIONAL EUROPA ---
+        ax1.set_facecolor('#000000')
+        ax1.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+        ax1.add_feature(cfeature.LAND, facecolor='#0a0a0a', zorder=1)
+        ax1.add_feature(cfeature.OCEAN, facecolor='#020205', zorder=1)
+        ax1.add_feature(cfeature.COASTLINE, edgecolor='#1e3a8a', linewidth=0.9, zorder=3)
+        ax1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#1e3a8a', alpha=0.5, zorder=3)
+
+        gl1 = ax1.gridlines(draw_labels=True, color='#1e3a8a', alpha=0.15, linestyle='--')
+        gl1.top_labels, gl1.right_labels = False, False
+        gl1.xlabel_style, gl1.ylabel_style = {'color': '#3b82f6', 'size': 8}, {'color': '#3b82f6', 'size': 8}
+
+        grid_lon_eur, grid_lat_eur = np.meshgrid(lons_eur, lats_eur)
+        map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_eur, transform=ccrs.PlateCarree(),
+                                 cmap='jet', alpha=0.8, shading='gouraud', zorder=2)
+        
+        cbar1 = fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.06, shrink=0.7)
+        cbar1.set_label('Densidad Vertical de Electrones (TECU)', color='#3b82f6', fontsize=9)
+        cbar1.ax.tick_params(labelcolor='#3b82f6', labelsize=8)
+        ax1.set_title(f"REPOSITORIO REGIONAL EUROPA\nVentana: {fecha_real_eur.strftime('%Y-%m-%d %H:%M')} UTC", color='#3b82f6', weight='bold', size=10)
+
+        # --- MAPA 2: ENTORNO PLANETARIO GLOBAL ---
+        ax2.set_facecolor('#000000')
+        ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+        ax2.add_feature(cfeature.LAND, facecolor='#0a0a0a', zorder=1)
+        ax2.add_feature(cfeature.OCEAN, facecolor='#020205', zorder=1)
+        ax2.add_feature(cfeature.COASTLINE, edgecolor='#1e3a8a', linewidth=0.8, zorder=3)
+
+        gl2 = ax2.gridlines(draw_labels=True, color='#1e3a8a', alpha=0.12, linestyle='--')
+        gl2.top_labels, gl2.right_labels = False, False
+        gl2.xlabel_style, gl2.ylabel_style = {'color': '#3b82f6', 'size': 8}, {'color': '#3b82f6', 'size': 8}
+
+        grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
+        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_glb, transform=ccrs.PlateCarree(),
+                                 cmap='jet', alpha=0.75, shading='gouraud', zorder=2)
+        
+        cbar2 = fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.06, shrink=0.7)
+        cbar2.set_label('Densidad Vertical de Electrones (TECU)', color='#3b82f6', fontsize=9)
+        cbar2.ax.tick_params(labelcolor='#3b82f6', labelsize=8)
+        ax2.set_title("REPOSITORIO PLANETARIO GLOBAL\nEstado: LATEST (Tiempo Real Absoluto)", color='#3b82f6', weight='bold', size=10)
+
+        st.pyplot(fig)
 else:
-    # -----------------------------------------------------------------
-    # HERRAMIENTA 1: VERSIÓN POR HORAS (MAPAS DE RETRASO EN METROS)
-    # -----------------------------------------------------------------
-    if version_seleccionada == "1. Versión por Horas (Mapas 24h)":
-        st.header("🗺️ Distribución Espacial del Retraso de Grupo (Europa)")
-        constelacion_select = st.selectbox("Evaluar Mapa en Metros para la señal de:", ["GPS", "Galileo", "GLONASS", "BeiDou"])
-        
-        f_c = FREQS_GNSS[constelacion_select]
-        factor_m = (40.3 / (f_c ** 2)) * 1e16
-        
-        with st.spinner("Descargando matriz y proyectando espacio métrico..."):
-            fecha_h = datetime.datetime.combine(fecha_user, datetime.time(hora_user, 0))
-            matriz_tecu, _ = descargar_json_dlr(fecha_h)
-            
-            if matriz_tecu is not None:
-                matriz_metros = matriz_tecu * factor_m
-                v_min = max(0.0, float(np.floor(np.min(matriz_metros) - 0.5)))
-                v_max = float(np.ceil(np.max(matriz_metros) + 0.5))
-                
-                try:
-                    fig, ax = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100, facecolor='#000000')
-                    ax.set_facecolor('#000000')
-                    ax.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-                    
-                    ax.add_feature(cfeature.LAND, facecolor='#0a0a0a', zorder=1)
-                    ax.add_feature(cfeature.OCEAN, facecolor='#020205', zorder=1)
-                    ax.add_feature(cfeature.COASTLINE, edgecolor='#1e3a8a', linewidth=0.8, zorder=3)
-                    
-                    gl = ax.gridlines(draw_labels=True, color='#1e3a8a', alpha=0.15, linestyle='--')
-                    gl.top_labels, gl.right_labels = False, False
-                    gl.xlabel_style, gl.ylabel_style = {'color': '#3b82f6'}, {'color': '#3b82f6'}
-                    
-                    mesh = ax.pcolormesh(grid_lon, grid_lat, matriz_metros, transform=ccrs.PlateCarree(),
-                                         cmap='jet', alpha=0.8, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-                    
-                    cbar = fig.colorbar(mesh, ax=ax, shrink=0.7, pad=0.03)
-                    cbar.set_label(f"Retraso de la Onda (Metros)", color='#3b82f6', weight='bold')
-                    cbar.ax.tick_params(labelcolor='#3b82f6') # FIJADO: labelcolor sin 's'
-                    
-                    st.pyplot(fig)
-                except Exception:
-                    fig, ax = plt.subplots(figsize=(10, 5), facecolor='#000000')
-                    ax.set_facecolor('#000000')
-                    mesh = ax.pcolormesh(grid_lon, grid_lat, matriz_metros, cmap='jet', shading='gouraud', vmin=v_min, vmax=v_max)
-                    cbar = fig.colorbar(mesh, ax=ax, shrink=0.7)
-                    cbar.set_label("Retraso (Metros)", color='#3b82f6')
-                    cbar.ax.tick_params(labelcolor='#3b82f6') # FIJADO: labelcolor sin 's'
-                    ax.tick_params(colors='#3b82f6')
-                    st.pyplot(fig)
-                
-                c1, c2 = st.columns(2)
-                c1.metric(f"Máximo Retraso en Europa ({constelacion_select})", f"{np.max(matriz_metros):.2f} m")
-                c2.metric(f"Impacto Estimado en Coordenada Seleccionada", f"{matriz_metros[lat_idx, lon_idx]:.2f} m")
-            else:
-                st.error("Datos reales no disponibles para este bloque horario en el servidor del DLR.")
-
-    # -----------------------------------------------------------------
-    # HERRAMIENTA 2: VERSIÓN MATEMÁTICA (PREDICCIÓN VS REALIDAD COMPLETA)
-    # -----------------------------------------------------------------
-    elif version_seleccionada == "2. Versión Matemática (Predicción vs Realidad)":
-        st.header(f"📈 Auditoría de Tendencia Centrada a las {hora_user:02d}:00 UTC")
-        rango_dias = st.slider("Ventana de días para el entrenamiento de la serie", 5, 15, 7)
-        
-        if st.button("🧠 Iniciar Auditoría de Enlaces"):
-            with st.spinner("Ejecutando escáner de red bihorario..."):
-                cronologia_tecu = []
-                fechas_list = []
-                
-                total_pasos = rango_dias * 12
-                barra_progreso = st.progress(0)
-                
-                # Sincronización horaria exacta solicitada por el usuario
-                fecha_base_calculo = datetime.datetime.combine(fecha_user, datetime.time(hora_user, 0))
-                
-                for i in range(total_pasos):
-                    f_calc = fecha_base_calculo - datetime.timedelta(hours=(total_pasos-i)*2)
-                    m_tecu, _ = descargar_json_dlr(f_calc)
-                    if m_tecu is not None:
-                        cronologia_tecu.append(m_tecu[lat_idx, lon_idx])
-                        fechas_list.append(f_calc)
-                    barra_progreso.progress((i+1) / total_pasos)
-                
-                if len(cronologia_tecu) > 24:
-                    vector_serie = np.array(cronologia_tecu)
-                    
-                    periodo = 12
-                    perfil_estacional = np.zeros(periodo)
-                    for i in range(periodo):
-                        perfil_estacional[i] = np.mean(vector_serie[i::periodo])
-                        
-                    ultimo_val = vector_serie[-1]
-                    ultimo_slot = (len(vector_serie) - 1) % periodo
-                    anomalia = ultimo_val - perfil_estacional[ultimo_slot]
-                    
-                    predicciones_futuras = []
-                    fechas_futuras = []
-                    alpha = 0.85
-                    for k in range(1, 4): # Próximas 6 horas
-                        slot_futuro = (ultimo_slot + k) % periodo
-                        val_pred = perfil_estacional[slot_futuro] + anomalia * (alpha ** k)
-                        predicciones_futuras.append(val_pred)
-                        fechas_futuras.append(fechas_list[-1] + datetime.timedelta(hours=k*2))
-                    
-                    realidad_futura = []
-                    fechas_reales_futuras = []
-                    for f_fut in fechas_futuras:
-                        m_real, _ = descargar_json_dlr(f_fut)
-                        if m_real is not None:
-                            realidad_futura.append(m_real[lat_idx, lon_idx])
-                            fechas_reales_futuras.append(f_fut)
-                    
-                    fig, ax = plt.subplots(figsize=(11, 4.5), facecolor='#000000')
-                    ax.set_facecolor('#000000')
-                    
-                    ax.plot(fechas_list[-12:], vector_serie[-12:], color='#60a5fa', linewidth=2, label="Historial Real Verificado", marker='o')
-                    ax.plot(fechas_futuras, predicciones_futuras, color='#2563eb', linewidth=2.5, linestyle='--', label="Algoritmo Matemático (Modelo)", marker='x')
-                    
-                    if realidad_futura:
-                        ax.plot(fechas_reales_futuras, realidad_futura, color='#ffffff', linewidth=2.5, label="Validación Real (Datos del Servidor)", marker='s')
-                        
-                    todos_los_valores = list(vector_serie[-12:]) + list(predicciones_futuras) + list(realidad_futura)
-                    y_min = max(0.0, float(np.floor(min(todos_los_valores) - 2)))
-                    y_max = float(np.ceil(max(todos_los_valores) + 2))
-                    ax.set_ylim(y_min, y_max)
-                    
-                    ax.tick_params(colors='#3b82f6', labelsize=9)
-                    ax.xaxis.label.set_color('#3b82f6')
-                    ax.yaxis.label.set_color('#3b82f6')
-                    ax.spines['bottom'].set_color('#1e3a8a')
-                    ax.spines['left'].set_color('#1e3a8a')
-                    ax.spines['top'].set_visible(False)
-                    ax.spines['right'].set_visible(False)
-                    ax.grid(True, linestyle='--', alpha=0.1, color='#3b82f6')
-                    ax.set_ylabel("Densidad de Electrones (TECU)", weight='bold')
-                    
-                    legend = ax.legend(facecolor='#000000', edgecolor='#1e3a8a')
-                    for text in legend.get_texts(): text.set_color('#60a5fa')
-                        
-                    st.pyplot(fig)
-                    
-                    if len(realidad_futura) == len(predicciones_futuras):
-                        error_medio = np.mean(np.abs(np.array(realidad_futura) - np.array(predicciones_futuras)))
-                        st.success(f"🎯 Análisis cerrado. El error absoluto medio de la proyección a las {hora_user:02d}:00 fue de: **{error_medio:.3f} TECU**.")
-                    else:
-                        st.warning("⚠️ Operación parcial: Los enlaces del tiempo real exacto aún están siendo procesados por el DLR.")
-                else:
-                    st.error("Fallo de red: No se detectaron suficientes mallas reales válidas.")
-
-    # -----------------------------------------------------------------
-    # HERRAMIENTA 3: VERSIÓN POR CONSTELACIONES (ESPECTRO MULTI-FRECUENCIA)
-    # -----------------------------------------------------------------
-    elif version_seleccionada == "3. Versión por Constelaciones (Error)":
-        st.header(f"📡 Ventana Diaria de Desviación Métrica Absoluta")
-        
-        with st.spinner("Calculando retrasos de grupo por frecuencia..."):
-            perfiles_tecu_24h = []
-            horas_validas = []
-            
-            # Sincronización de un ciclo completo de 24h partiendo de la hora base
-            for h_offset in range(0, 24, 2):
-                fecha_h = datetime.datetime.combine(fecha_user, datetime.time(hora_user, 0)) + datetime.timedelta(hours=h_offset)
-                m_tecu, _ = descargar_json_dlr(fecha_h)
-                if m_tecu is not None:
-                    perfiles_tecu_24h.append(m_tecu[lat_idx, lon_idx])
-                    horas_validas.append(fecha_h.strftime("%H:%M"))
-            
-            if perfiles_tecu_24h:
-                vector_tecu = np.array(perfiles_tecu_24h)
-                
-                fig, ax = plt.subplots(figsize=(11, 5), facecolor='#000000')
-                ax.set_facecolor('#000000')
-                
-                colores = {"GLONASS": "#3b82f6", "GPS": "#06b6d4", "Galileo": "#ffffff", "BeiDou": "#ef4444"}
-                estilos = {"GLONASS": "-", "GPS": "-", "Galileo": "--", "BeiDou": "-"}
-                
-                todos_los_metros = []
-                for name_const, f_const in FREQS_GNSS.items():
-                    factor = (40.3 / (f_const ** 2)) * 1e16
-                    metros_error = vector_tecu * factor
-                    todos_los_metros.extend(metros_error)
-                    
-                    ax.plot(horas_validas, metros_error, 
-                            color=colores[name_const], linestyle=estilos[name_const],
-                            linewidth=2.5 if name_const == "Galileo" else 2,
-                            label=f"{name_const} ({f_const/1e6:.1f} MHz)", marker='o')
-                
-                ax.set_ylim(max(0.0, float(np.floor(min(todos_los_metros) - 0.5))), float(np.ceil(max(todos_los_metros) + 0.5)))
-                
-                ax.tick_params(colors='#3b82f6', labelsize=9)
-                ax.xaxis.label.set_color('#3b82f6')
-                ax.yaxis.label.set_color('#3b82f6')
-                ax.spines['bottom'].set_color('#1e3a8a')
-                ax.spines['left'].set_color('#1e3a8a')
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-                ax.grid(True, linestyle='--', alpha=0.1, color='#3b82f6')
-                ax.set_ylabel("Retraso en Metros", weight='bold')
-                ax.set_xlabel("Línea del Tiempo desde Sincronización Base (UTC)", weight='bold')
-                
-                legend = ax.legend(facecolor='#000000', edgecolor='#1e3a8a')
-                for text in legend.get_texts(): text.set_color('#60a5fa')
-                    
-                st.pyplot(fig)
-            else:
-                st.error("El servidor del DLR no devolvió datos limpios para esta ventana de tiempo.")
+    st.info("⌛ Conectando con los servidores del DLR alemán para inicializar la cartografía...")
