@@ -26,7 +26,7 @@ La presencia de estos electrones libres interactúa de forma directa con las se�
 * **Variabilidad Espacio-Temporal:** Durante tormentas solares, el TEC aumenta drásticamente de forma impredecible, afectando la precisión de servicios de alta precisión (como RTK o navegación aérea guiada por satélite).
 """)
 
-st.separator()
+st.divider() # <--- CORREGIDO: Antes era st.separator()
 
 # =====================================================================
 # FUNCIONES DE SOPORTE Y OBTENCIÓN DE DATOS
@@ -123,7 +123,7 @@ try:
         else:
             st.error("No se pudo encontrar la localización. Intenta ser más específico o escribirlo en otro formato.")
 
-    st.separator()
+    st.divider() # <--- CORREGIDO: Antes era st.separator()
 
     # =====================================================================
     # SECCIÓN DE MAPAS EN TIEMPO REAL
