@@ -1,5 +1,6 @@
 import datetime
 import requests
+import time  # Requerido para el control de tiempo del video (0.5s)
 import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -8,67 +9,28 @@ from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from scipy.interpolate import RegularGridInterpolator
 import streamlit as st
 
-# Configuración de la página web
-st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
+# (Las pestañas 1 y 2 se mantienen exactamente igual en tu archivo principal)
 
 # =====================================================================
-# CONFIGURACIÓN DE PESTAÑAS PRINCIPALES
-# =====================================================================
-tab1, tab2, tab3 = st.tabs(["🌍 Inicio y Monitoreo Real", "📊 Análisis en el pasado", "📈 Evolución TECU"])
-
-# FUNCIÓN COMPARTIDA DE GEOCODIFICACIÓN
-def geocodificar_localidad(nombre_lugar):
-    try:
-        url = f"https://nominatim.openstreetmap.org/search?q={nombre_lugar}&format=json&limit=1"
-        headers = {"User-Agent": "Streamlit_Ionosphere_App_v3"}
-        res = requests.get(url, headers=headers, timeout=5)
-        data = res.json()
-        if data:
-            return float(data[0]['lat']), float(data[0]['lon']), data[0]['display_name']
-    except Exception:
-        pass
-    return None, None, None
-
-# =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL
-# =====================================================================
-with tab1:
-    st.title("🛰️ Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)")
-    st.markdown("""
-    ### ¿Cómo afectan el TEC y el TECU a las señales GNSS?
-    El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado). 
-    """)
-    st.divider()
-    # (El resto del código de la pestaña 1 se mantiene igual de forma interna...)
-
-# =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO
-# =====================================================================
-with tab2:
-    st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
-    # (El resto del código de la pestaña 2 se mantiene igual de forma interna...)
-
-# =====================================================================
-# PESTAÑA 3: EVOLUCIÓN TECU (DISEÑADA COMPLETAMENTE)
+# PESTAÑA 3: EVOLUCIÓN TECU (REDISEÑADA POR PARTES)
 # =====================================================================
 with tab3:
     st.title("📈 Estudio de Evolución Temporal del TECU")
     
-    # Menú de selección de modo
     modo_evolucion = st.radio("Selecciona el tipo de análisis temporal:", ["Por Días", "Por Horas (Próximamente)"], horizontal=True)
 
     if modo_evolucion == "Por Días":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         
-        # Inicializar variables de estado persistentes en la sesión de Streamlit
+        # Inicialización de estados de sesión necesarios
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d = None
             st.session_state.etiquetas_fechas_reales = []
             st.session_state.limites_globales = (0, 15)
             st.session_state.matriz_maximos = None
-            st.session_state.ciudades_lista = []  # Almacena el historial de ciudades consultadas
+            st.session_state.ciudades_lista = []
 
-        # Formulario de parámetros de rango de días
+        # Formulario de parámetros
         col_c1, col_c2, col_c3 = st.columns(3)
         fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
         hora_fija_sel = col_c2.slider("Hora fija de observación (UTC):", 0, 23, 15)
@@ -100,7 +62,7 @@ with tab3:
                 data = None
                 minuto_exitoso = 0
 
-                for m in minutos_contiguos:
+                for m in minutes_contiguos:
                     url_intento = generar_enlace_dlr_rango(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                     try:
                         response = requests.get(url_intento, headers=headers, timeout=4)
@@ -128,44 +90,28 @@ with tab3:
                 st.session_state.historial_vtec_3d = temp_3d
                 st.session_state.etiquetas_fechas_reales = temp_etiquetas
                 
-                # Regla del +-2 solicitada
                 max_r = np.max(temp_3d)
                 min_r = np.max([0.0, np.min(temp_3d)])
                 st.session_state.limites_globales = (max(0.0, float(np.floor(min_r - 2))), float(np.ceil(max_r + 2)))
                 st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                st.success("📊 Rango temporal procesado y almacenado.")
+                st.success("📊 Rango temporal procesado con éxito.")
 
-        # SI LOS DATOS ESTÁN CARGADOS, HACEMOS EL DESPLIEGUE GRÁFICO
+        # COMPONENTES VISUALES UNA VEZ CARGADOS LOS DATOS
         if st.session_state.historial_vtec_3d is not None:
             st.divider()
-            
-            # --- SECCIÓN 1: REPRODUCTOR DE MAPAS (REEMPLAZO ESTABLE DE LA ANIMACION) ---
-            st.subheader("🗺️ 1. Línea del Tiempo: Mapas de Evolución")
-            frame_sel = st.slider("Desplaza el selector para ver los mapas de cada día del historial:", 
-                                  0, len(st.session_state.etiquetas_fechas_reales) - 1, 0)
             
             v_min, v_max = st.session_state.limites_globales
             lons_vector = np.arange(-30, 51, 1)
             lats_vector = np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
-            # Graficar los dos mapas lado a lado (Día Actual vs Máximos Absolutos del periodo)
-            fig_evolucion, (ax_ev, ax_mx) = plt.subplots(1, 2, figsize=(16, 7), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
-
-            # Mapa Izquierdo: Frame actual
-            ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
-            ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-            ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-            ax_ev.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-            ax_ev.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
-            ax_ev.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+            # -----------------------------------------------------------------
+            # PARTE 1: MAPA DE MÁXIMOS (ESTRUCTURA FIJA)
+            # -----------------------------------------------------------------
+            st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
+            st.write("Muestra el valor más alto alcanzado en cada punto cardinal durante todo el periodo analizado.")
             
-            mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[frame_sel, :, :], 
-                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-            fig_evolucion.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.07, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
-            ax_ev.set_title(f"Fotograma Actual: {st.session_state.etiquetas_fechas_reales[frame_sel]} UTC", weight='bold')
-
-            # Mapa Derecho: Máximos Absolutos del rango
+            fig_max, ax_mx = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
@@ -175,15 +121,74 @@ with tab3:
 
             mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, 
                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
-            fig_evolucion.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.07, shrink=0.8).set_label('PICO MÁXIMO (TECU)', weight='bold')
-            ax_mx.set_title("Mapa de Máximos Registrados en el Periodo Completo", weight='bold')
-
-            st.pyplot(fig_evolucion)
+            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='vertical', pad=0.02, shrink=0.8).set_label('PICO MÁXIMO (TECU)', weight='bold')
+            ax_mx.set_title("Distribución de Intensidades Máximas Observadas", weight='bold')
+            st.pyplot(fig_max)
 
             st.divider()
 
-            # --- SECCIÓN 2: GRÁFICA ACUMULATIVA DE LOCALIDADES ---
-            st.subheader("📊 2. Gráfica Comparativa de Localidades Acumuladas")
+            # -----------------------------------------------------------------
+            # PARTE 2: MAPA DE FLAMES TIPO VIDEO (REPRODUCTOR AUTOMÁTICO A 0.5s)
+            # -----------------------------------------------------------------
+            st.subheader("🎬 Reproductor de Video: Evolución Diaria del TEC (0.5s por Frame)")
+            
+            # Botones de control de flujo del video
+            col_b1, col_b2, col_b3 = st.columns([1, 1, 4])
+            play_video = col_b1.button("▶️ Reproducir Video")
+            stop_video = col_b2.button("⏹️ Detener")
+
+            # Contenedor dinámico asíncrono para el mapa tipo video
+            contenedor_video_mapa = st.empty()
+
+            if play_video:
+                # Bucle de animación iterativo
+                num_frames = len(st.session_state.etiquetas_fechas_reales)
+                for f in range(num_frames):
+                    fig_video, ax_ev = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+                    ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_ev.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    ax_ev.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+                    ax_ev.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+                    
+                    # Cargar matriz del frame actual
+                    matriz_frame = st.session_state.historial_vtec_3d[f, :, :]
+                    mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, matriz_frame, 
+                                                     transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+                    fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                    
+                    ax_ev.set_title(f"Video en Curso ➔ Fecha del Frame: {st.session_state.etiquetas_fechas_reales[f]} UTC", weight='bold', color='#1976d2')
+                    
+                    # Pintar de forma limpia sobre el mismo contenedor fijo
+                    contenedor_video_mapa.pyplot(fig_video)
+                    plt.close(fig_video)
+                    
+                    # Espera estricta de 0.5 segundos solicitada por frame
+                    time.sleep(0.5)
+            else:
+                # Vista estática por defecto antes de dar Play (Muestra el primer día)
+                fig_video, ax_ev = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
+                ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                ax_ev.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                ax_ev.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                ax_ev.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#888888', zorder=3)
+                ax_ev.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--').top_labels = False
+                
+                mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[0, :, :], 
+                                                 transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max, zorder=2)
+                fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='vertical', pad=0.02, shrink=0.8).set_label('VTEC (TECU)', weight='bold')
+                ax_ev.set_title(f"Video Detenido ➔ Presiona Play para iniciar", weight='bold')
+                contenedor_video_mapa.pyplot(fig_video)
+                plt.close(fig_video)
+
+            st.divider()
+
+            # -----------------------------------------------------------------
+            # PARTE 3: GRÁFICA ACUMULATIVA DE LOCALIDADES (Sin alteraciones)
+            # -----------------------------------------------------------------
+            st.subheader("📊 3. Gráfica Comparativa de Localidades Acumuladas")
             st.write("Escribe el nombre de una ciudad y presiona el botón. Se agregará a la gráfica sin borrar las anteriores.")
 
             with st.form("formulario_acumulador_ciudades"):
@@ -193,7 +198,6 @@ with tab3:
             if boton_agregar and nueva_ciudad:
                 lat_c, lon_c, _ = geocodificar_localidad(nueva_ciudad)
                 if lat_c is not None and (30 <= lat_c <= 72) and (-30 <= lon_c <= 50):
-                    # Guardar coordenadas y nombre en la lista de la sesión para que no se borren
                     if nueva_ciudad.capitalize() not in [c['name'] for c in st.session_state.ciudades_lista]:
                         st.session_state.ciudades_lista.append({
                             'name': nueva_ciudad.capitalize(),
@@ -204,7 +208,6 @@ with tab3:
                 else:
                     st.error("Ubicación no encontrada o fuera del área de cobertura de Europa.")
 
-            # Dibujar la gráfica acumulativa si hay ciudades registradas
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
                 
@@ -224,13 +227,11 @@ with tab3:
                 ax_lineas.set_xlabel("Muestras de la Línea Temporal (UTC)", weight='bold')
                 ax_lineas.set_title(f"Evolución Comparativa (Límites Eje Y: {int(v_min)}-{int(v_max)} TECU)", weight='bold')
                 ax_lineas.legend(loc="upper right")
-                
                 st.pyplot(fig_lineas)
+                plt.close(fig_lineas)
                 
-                # Opción para limpiar la gráfica acumulada
                 if st.button("🗑️ Limpiar todas las ciudades del gráfico"):
                     st.session_state.ciudades_lista = []
                     st.rerun()
-
     else:
         st.info("🛠️ El módulo de análisis continuo por horas se habilitará en las próximas versiones de desarrollo.")
