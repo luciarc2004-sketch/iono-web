@@ -14,9 +14,11 @@ import streamlit as st
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
 # =====================================================================
-# CONFIGURACIÓN GLOBAL
+# CONFIGURACIÓN GLOBAL ESTRICTA (REGLA 0-55 TECU)
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+VMIN_TECU_FIJO = 0.0
+VMAX_TECU_FIJO = 55.0
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🌍 Inicio y Monitoreo Real", 
@@ -124,16 +126,20 @@ with tab1:
         ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
         ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
         grid_lon_eur, grid_lat_eur = np.meshgrid(lons_eur, lats_eur)
-        map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud')
-        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC MALLA REGIONAL (TECU)', weight='bold')
+        
+        # APLICACIÓN DE LA ESCALA UNIFICADA 0-55 TECU (MALLA REGIONAL)
+        map_eur = ax1.pcolormesh(grid_lon_eur, grid_lat_eur, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC MALLA REGIONAL (TECU) [ESCALA UNIFICADA]', weight='bold')
 
         ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
         ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
         ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
         ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0)
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
-        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud')
-        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU)', weight='bold')
+        
+        # APLICACIÓN DE LA ESCALA UNIFICADA 0-55 TECU (MALLA GLOBAL)
+        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label('VTEC GLOBAL (TECU) [ESCALA UNIFICADA]', weight='bold')
         st.pyplot(fig)
     except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 
@@ -189,8 +195,10 @@ with tab2:
         ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
         ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222')
         grid_lon_p, grid_lat_p = np.meshgrid(lons_p, lats_p)
-        mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud')
-        plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC ASSIMILATED (TECU)', weight='bold')
+        
+        # APLICACIÓN DE LA ESCALA UNIFICADA 0-55 TECU (MAPAS DEL PASADO)
+        mapa_p = ax_p.pcolormesh(grid_lon_p, grid_lat_p, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+        plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC ASSIMILATED (TECU) [ESCALA UNIFICADA]', weight='bold')
         st.pyplot(fig_p)
         plt.close(fig_p)
 
@@ -205,7 +213,7 @@ with tab3:
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
-            st.session_state.limites_globales, st.session_state.matriz_maximos, st.session_state.ciudades_lista = (0, 15), None, []
+            st.session_state.matriz_maximos, st.session_state.ciudades_lista = None, []
 
         col_c1, col_c2, col_c3 = st.columns(3)
         fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
@@ -243,12 +251,10 @@ with tab3:
                 if exito_total:
                     st.session_state.historial_vtec_3d = temp_3d
                     st.session_state.etiquetas_fechas_reales = temp_etiquetas
-                    st.session_state.limites_globales = (max(0.0, float(np.floor(np.min(temp_3d) - 2))), float(np.ceil(np.max(temp_3d) + 2)))
                     st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
                     st.success("📊 Rango temporal procesado.")
 
         if st.session_state.historial_vtec_3d is not None:
-            v_min, v_max = st.session_state.limites_globales
             lons_vector, lats_vector = np.arange(-30, 51, 1), np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
@@ -257,8 +263,10 @@ with tab3:
             ax_mx.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-            mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max)
-            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
+            
+            # ESCALA UNIFICADA EN MÁXIMOS INTERDIARIOS
+            mapa_maximos = ax_mx.pcolormesh(grid_lon, grid_lat, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU) [ESCALA UNIFICADA]', weight='bold')
             st.pyplot(fig_max)
             plt.close(fig_max)
 
@@ -269,8 +277,10 @@ with tab3:
                     fig_video, ax_ev = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_ev.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                     ax_ev.add_feature(cfeature.LAND, facecolor='#f6f6f6')
-                    mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=v_min, vmax=v_max)
-                    fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    
+                    # ESCALA UNIFICADA EN FRAMES INTERDIARIOS
+                    mapa_dinamico = ax_ev.pcolormesh(grid_lon, grid_lat, st.session_state.historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+                    fig_video.colorbar(mapa_dinamico, ax=ax_ev, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU) [ESCALA UNIFICADA]', weight='bold')
                     contenedor_video_mapa.pyplot(fig_video)
                     plt.close(fig_video)
                     time.sleep(0.5)
@@ -294,7 +304,9 @@ with tab3:
                     idx_lon = (np.abs(lons_vector - ciudad_obj['lon'])).argmin()
                     ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), st.session_state.historial_vtec_3d[:, idx_lat, idx_lon], marker='s', linewidth=2, label=ciudad_obj['name'])
                 ax_lineas.grid(True, linestyle='--')
-                ax_lineas.set_ylim(v_min, v_max)
+                
+                # Sincronización estricta del eje Y de la gráfica de líneas a 0-55
+                ax_lineas.set_ylim(VMIN_TECU_FIJO, VMAX_TECU_FIJO)
                 ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales)))
                 ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25)
                 ax_lineas.legend(loc="upper right")
@@ -305,7 +317,7 @@ with tab3:
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         if 'h_historial_vtec_3d' not in st.session_state:
             st.session_state.h_historial_vtec_3d, st.session_state.h_etiquetas_reales = None, []
-            st.session_state.h_limites_globales, st.session_state.h_matriz_maximos, st.session_state.h_ciudades_lista = (0, 15), None, []
+            st.session_state.h_matriz_maximos, st.session_state.h_ciudades_lista = None, []
 
         fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
@@ -339,12 +351,10 @@ with tab3:
                 if h_exito_total:
                     st.session_state.h_historial_vtec_3d = h_temp_3d
                     st.session_state.h_etiquetas_reales = h_temp_etiquetas
-                    st.session_state.h_limites_globales = (max(0.0, float(np.floor(np.min(h_temp_3d) - 2))), float(np.ceil(np.max(h_temp_3d) + 2)))
                     st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
                     st.success("📊 Completado.")
 
         if st.session_state.h_historial_vtec_3d is not None:
-            vh_min, vh_max = st.session_state.h_limites_globales
             lons_vector, lats_vector = np.arange(-30, 51, 1), np.arange(30, 73, 1)
             grid_lon, grid_lat = np.meshgrid(lons_vector, lats_vector)
 
@@ -352,8 +362,10 @@ with tab3:
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
             ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
-            mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max)
-            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
+            
+            # ESCALA UNIFICADA EN MÁXIMOS HORARIOS
+            mapa_maximos_h = ax_mxh.pcolormesh(grid_lon, grid_lat, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU) [ESCALA UNIFICADA]', weight='bold')
             st.pyplot(fig_max_h)
             plt.close(fig_max_h)
 
@@ -364,8 +376,10 @@ with tab3:
                     fig_vid_h, ax_evh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
                     ax_evh.set_extent([-30, 50, 30, 72], crs=ccrs.PlateCarree())
                     ax_evh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
-                    mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vh_min, vmax=vh_max)
-                    fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    
+                    # ESCALA UNIFICADA EN FRAMES HORARIOS
+                    mapa_dinamico_h = ax_evh.pcolormesh(grid_lon, grid_lat, st.session_state.h_historial_vtec_3d[f, :, :], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=VMIN_TECU_FIJO, vmax=VMAX_TECU_FIJO)
+                    fig_vid_h.colorbar(mapa_dinamico_h, ax=ax_evh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU) [ESCALA UNIFICADA]', weight='bold')
                     contenedor_video_horas.pyplot(fig_vid_h)
                     plt.close(fig_vid_h)
                     time.sleep(0.5)
@@ -389,7 +403,9 @@ with tab3:
                     idx_lon = (np.abs(lons_vector - ciudad_obj['lon'])).argmin()
                     ax_lineas_h.plot(range(24), st.session_state.h_historial_vtec_3d[:, idx_lat, idx_lon], marker='o', linewidth=2, label=ciudad_obj['name'])
                 ax_lineas_h.grid(True, linestyle='--')
-                ax_lineas_h.set_ylim(vh_min, vh_max)
+                
+                # Sincronización estricta del eje Y de la gráfica de líneas a 0-55
+                ax_lineas_h.set_ylim(VMIN_TECU_FIJO, VMAX_TECU_FIJO)
                 ax_lineas_h.set_xticks(range(24))
                 ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45)
                 ax_lineas_h.legend(loc="upper right")
