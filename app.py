@@ -789,7 +789,7 @@ with tab6:
             st.error("⚠️ Por favor, escribe un comentario antes de continuar.")
         else:
             # Configuramos tus datos de recepción
-            TU_EMAIL = "tu_correo_aqui@ejemplo.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
+            TU_EMAIL = "luciarc2004@gmail.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
             asunto_correo = f"[FEEDBACK PORTAL IONOSFERA] - {tipo_comentario}"
             
             # Formateamos el cuerpo del texto para el Mailto
