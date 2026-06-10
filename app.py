@@ -28,12 +28,13 @@ LATS_EUROPA = np.arange(LAT_MIN, LAT_MAX + DELTA_LAT, DELTA_LAT)
 LONS_EUROPA = np.arange(LON_MIN, LON_MAX + DELTA_LON, DELTA_LON)
 GRID_LON_EUR, GRID_LAT_GRID = np.meshgrid(LONS_EUROPA, LATS_EUROPA)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🌍 Inicio y Monitoreo Real", 
     "📊 Análisis en el pasado", 
     "📈 Evolución TECU", 
     "🔮 Pronóstico", 
-    "📉 Desviaciones del Modelo"
+    "📉 Desviaciones del Modelo",
+    "💬 Comentarios y Feedback"
 ])
 
 def geocodificar_localidad(nombre_lugar):
@@ -78,14 +79,15 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
 
 # =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL
+# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (ACTUALIZADA)
 # =====================================================================
 with tab1:
     st.title("🛰️ Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)")
     st.markdown("### ¿Cómo afectan el TEC y el TECU a las señales GNSS?")
-    st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** (1 TECU = $10^{16}$ electrones por metro cuadrado).")
+    st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** ($1\\text{ TECU} = 10^{16}$ electrones por metro cuadrado).")
     st.divider()
 
+    # Enlaces de los servidores del DLR para Tiempo Real
     url_europa = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_latest_D.json"
     url_global = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL_latest_D.json"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -104,12 +106,13 @@ with tab1:
         matriz_vtec_eur, matriz_vtec_glb = cargar_datos_vtec()
         lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
         
+        # Generación de interpoladores espaciales lineales en tiempo real
         interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
-        interp_global = RegularGridInterpolator((lats_glb, lons_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
+        interp_global = RegularGridInterpolator((lats_glb, lats_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas (Tiempo Real)")
         
-        # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 1)
+        # Sistema dual alternativo de entrada de localización
         tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por Ciudad/Región", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
         
         lat, lon, label_punto = None, None, ""
@@ -124,6 +127,7 @@ with tab1:
             lon_manual = col_l2.number_input("Longitud (°E):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_t1")
             lat, lon, label_punto = lat_manual, lon_manual, f"Coordenadas Puras"
 
+        # Procesamiento dinámico del píxel consultado
         if lat is not None and lon is not None:
             dentro_europa = (LAT_MIN <= lat <= LAT_MAX) and (LON_MIN <= lon <= LON_MAX)
             punto_consulta = np.array([[lat, lon]])
@@ -139,6 +143,7 @@ with tab1:
 
         st.divider()
         
+        # Interruptor de control para el ajuste de escala local solicitado
         ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
         
         if ajuste_local_t1:
@@ -150,7 +155,10 @@ with tab1:
             vmin_glb, vmax_glb = VMIN_TECU_FIJO, VMAX_TECU_FIJO
             lbl_status = "Escala Fija Universal (0-55 TECU)"
 
+        # Construcción y renderizado de la figura dual
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+        
+        # Sub-mapa 1: Malla Regional Europa
         ax1.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
         ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5')
         ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
@@ -159,6 +167,7 @@ with tab1:
         map_eur = ax1.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_eur, vmax=vmax_eur)
         fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC MALLA REGIONAL (TECU) [{lbl_status}]', weight='bold')
 
+        # Sub-mapa 2: Malla Planetaria Global
         ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
         ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
         ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
@@ -167,7 +176,32 @@ with tab1:
         
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
+        
         st.pyplot(fig)
+
+        # -----------------------------------------------------------------
+        # SECCIÓN NUEVA: ENLACES DE INTERÉS Y RECURSOS CIENTÍFICOS
+        # -----------------------------------------------------------------
+        st.divider()
+        st.subheader("🔗 Enlaces de Interés y Recursos Científicos")
+        
+        col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
+        
+        with col_lnk1:
+            st.markdown("#### 🛰️ Proveedores de Datos")
+            st.markdown("- [DLR IMPC Portal](https://impc.dlr.de/) - Centro Alemán de Operaciones Espaciales.")
+            st.markdown("- [IGS Iono](https://igs.org/wg/ionosphere/) - International GNSS Service.")
+            
+        with col_lnk2:
+            st.markdown("#### 📚 Documentación y Ciencia")
+            st.markdown("- [ESA Navipedia - Ionosphere](https://gssc.esa.int/navipedia/) - Retrasos ionosféricos en GNSS.")
+            st.markdown("- [NOAA Space Weather](https://www.swpc.noaa.gov/) - Predicción del clima espacial.")
+            
+        with col_lnk3:
+            st.markdown("#### 🛠️ Herramientas Complementarias")
+            st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
+            st.markdown("- [RTKLIB](http://www.rtklib.com/) - Software de código abierto para posicionamiento GNSS.")
+
     except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 
 # =====================================================================
@@ -721,3 +755,73 @@ with tab4:
         
         st.pyplot(fig_p4)
         plt.close(fig_p4)
+
+
+
+# =====================================================================
+# PESTAÑA 6: COMENTARIOS Y FEEDBACK
+# =====================================================================
+with tab6:
+    st.title("💬 Buzón de Sugerencias y Feedback")
+    st.markdown("""
+    Tu opinión es fundamental para seguir mejorando los algoritmos de predicción e interpolación del portal. 
+    Utiliza este formulario para reportar errores, proponer nuevas herramientas o comentar tu experiencia.
+    """)
+    st.divider()
+
+    # Formulario estético de recogida de información
+    with st.form("formulario_feedback", clear_on_submit=False):
+        nombre = st.text_input("👤 Tu Nombre / Institución:", placeholder="Ej. Laboratorio de Geomagnetismo UCLM")
+        email_usuario = st.text_input("📧 Correo electrónico de contacto:", placeholder="ejemplo@correo.com")
+        
+        tipo_comentario = st.selectbox(
+            "📌 Tipo de aportación:",
+            ["Sugerencia de mejora", "Reportar un fallo (Bug)", "Felicitación / Feedback general", "Petición de colaboración científica"]
+        )
+        
+        comentario = st.text_area("✍️ Escribe aquí tus comentarios o detalles del error:", height=150)
+        
+        # Botón de validación del formulario
+        procesar_envio = st.form_submit_button("✉️ Preparar Correo de Feedback")
+
+    if procesar_envio:
+        if not comentario.strip():
+            st.error("⚠️ Por favor, escribe un comentario antes de continuar.")
+        else:
+            # Configuramos tus datos de recepción
+            TU_EMAIL = "tu_correo_aqui@ejemplo.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
+            asunto_correo = f"[FEEDBACK PORTAL IONOSFERA] - {tipo_comentario}"
+            
+            # Formateamos el cuerpo del texto para el Mailto
+            cuerpo_correo = (
+                f"Hola,\n\n"
+                f"Has recibido un nuevo comentario desde el Portal Ionosférico:\n\n"
+                f"Remitente: {nombre if nombre else 'Anónimo'}\n"
+                f"Contacto: {email_usuario if email_usuario else 'No facilitado'}\n"
+                f"Categoría: {tipo_comentario}\n\n"
+                f"Mensaje:\n{comentario}\n\n"
+                f"--- Enviado desde la aplicación web ---"
+            )
+            
+            # Codificación segura de caracteres para URLs de correo (evita romper acentos y espacios)
+            import urllib.parse
+            asunto_codificado = urllib.parse.quote(asunto_correo)
+            cuerpo_codificado = urllib.parse.quote(cuerpo_correo)
+            
+            # Construcción del enlace Mailto dinámico
+            mailto_url = f"mailto:{TU_EMAIL}?subject={asunto_codificado}&body={cuerpo_codificado}"
+            
+            # Notificación y botón de acción para abrir el gestor de correo
+            st.success("🎉 ¡Estructura de feedback generada con éxito!")
+            st.markdown(
+                f'<a href="{mailto_url}" target="_blank" style="text-decoration:none;">'
+                f'<div style="padding:12px; background-color:#ff3d00; color:white; text-align:center; '
+                f'border-radius:6px; font-weight:bold; font-size:16px;">'
+                f'🚀 Haz clic aquí para enviar el correo electrónico'
+                f'</div></a>', 
+                unsafe_allow_value=True
+            )
+            st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
+
+
+
