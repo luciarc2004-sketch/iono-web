@@ -28,13 +28,12 @@ LATS_EUROPA = np.arange(LAT_MIN, LAT_MAX + DELTA_LAT, DELTA_LAT)
 LONS_EUROPA = np.arange(LON_MIN, LON_MAX + DELTA_LON, DELTA_LON)
 GRID_LON_EUR, GRID_LAT_GRID = np.meshgrid(LONS_EUROPA, LATS_EUROPA)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🌍 Inicio y Monitoreo Real", 
     "📊 Análisis en el pasado", 
     "📈 Evolución TECU", 
     "🔮 Pronóstico", 
-    "📉 Desviaciones del Modelo",
-    "💬 Comentarios y Feedback"
+    "📉 Desviaciones del Modelo"
 ])
 
 def geocodificar_localidad(nombre_lugar):
@@ -170,153 +169,86 @@ with tab1:
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
         st.pyplot(fig)
     except Exception as e: st.error(f"Error en Tiempo Real: {e}")
-# (Este código va justo debajo de st.pyplot(fig) en la pestaña 1)
-        st.divider()
-        st.subheader("🔗 Enlaces de Interés y Recursos Científicos")
-        
-        col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
-        
-        with col_lnk1:
-            st.markdown("#### 🛰️ Proveedores de Datos")
-            st.markdown("- [DLR IMPC Portal](https://impc.dlr.de/) - Centro Alemán de Operaciones Espaciales.")
-            st.markdown("- [IGS Iono](https://igs.org/wg/ionosphere/) - International GNSS Service.")
-            
-        with col_lnk2:
-            st.markdown("#### 📚 Documentación y Ciencia")
-            st.markdown("- [ESA Navipedia - Ionosphere](https://gssc.esa.int/navipedia/) - Retrasos ionosféricos en GNSS.")
-            st.markdown("- [NOAA Space Weather](https://www.swpc.noaa.gov/) - Predicción del clima espacial.")
-            
-        with col_lnk3:
-            st.markdown("#### 🛠️ Herramientas Complementarias")
-            st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
-            st.markdown("- [RTKLIB](http://www.rtklib.com/) - Software de código abierto para posicionamiento GNSS.")
 
-    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 # =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (ACTUALIZADA)
+# PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
-with tab1:
-    st.title("🛰️ Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)")
-    st.markdown("### ¿Cómo afectan el TEC y el TECU a las señales GNSS?")
-    st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** ($1\\text{ TECU} = 10^{16}$ electrones por metro cuadrado).")
-    st.divider()
+with tab2:
+    st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
+    if 'matriz_pasado' not in st.session_state:
+        st.session_state.matriz_pasado = None
+    if 'fecha_mapa' not in st.session_state:
+        st.session_state.fecha_mapa = ""
 
-    # Enlaces de los servidores del DLR para Tiempo Real
-    url_europa = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_latest_D.json"
-    url_global = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL_latest_D.json"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    col_f1, col_f2, col_f3 = st.columns(3)
+    fecha_sel = col_f1.date_input("Selecciona la Fecha:", datetime.date(2026, 1, 24), key="past_date")
+    hora_sel = col_f2.slider("Hora (UTC):", 0, 23, 4, key="past_hour")
+    minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5, key="past_min")
 
-    @st.cache_data(ttl=900)
-    def cargar_datos_vtec():
-        res_eur = requests.get(url_europa, headers=headers, timeout=15)
-        res_eur.raise_for_status()
-        matriz_vtec_eur = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_eur.json()['data']['grid']['features']]).reshape(43, 81)
-        res_glb = requests.get(url_global, headers=headers, timeout=15)
-        res_glb.raise_for_status()
-        matriz_vtec_glb = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_glb.json()['data']['grid']['features']]).reshape(73, 73)
-        return matriz_vtec_eur, matriz_vtec_glb
+    minuto_ajustado = (minuto_sel // 15) * 15
+    url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    try:
-        matriz_vtec_eur, matriz_vtec_glb = cargar_datos_vtec()
-        lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
-        
-        # Generación de interpoladores espaciales lineales en tiempo real
-        interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
-        interp_global = RegularGridInterpolator((lats_glb, lats_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
+    if st.button("🚀 Cargar Mapa Histórico"):
+        with st.spinner("Sincronizando Malla Geomagnética Histórica con el DLR..."):
+            headers = {"User-Agent": "Mozilla/5.0"}
+            try:
+                response = requests.get(url_pasado, headers=headers, timeout=12)
+                response.raise_for_status() 
+                vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
+                st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
+                st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
+                st.success("📌 Archivo cargado correctamente.")
+            except Exception: st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
 
-        st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas (Tiempo Real)")
+    if st.session_state.matriz_pasado is not None:
+        st.divider()
+        st.subheader("📍 Interpolar Píxel Histórico Específico")
         
-        # Sistema dual alternativo de entrada de localización
-        tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por Ciudad/Región", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
+        # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 2)
+        tipo_busqueda_t2 = st.radio("Método de entrada de localización histórica:", ["Buscar por Nombre", "Coordenadas directas (Lat/Lon)"], horizontal=True, key="radio_t2")
         
-        lat, lon, label_punto = None, None, ""
+        lat_p, lon_p, label_p = None, None, ""
         
-        if tipo_busqueda_t1 == "Buscar por Ciudad/Región":
-            localidad_usuario = st.text_input("Escribe el nombre de una ciudad o región:", "Madrid", key="txt_t1")
-            if localidad_usuario:
-                lat, lon, label_punto = geocodificar_localidad(localidad_usuario)
+        if tipo_busqueda_t2 == "Buscar por Nombre":
+            localidad_p_usuario = st.text_input("Ingresa cualquier localidad dentro de la cuadrícula:", "Madrid", key="txt_t2")
+            if localidad_p_usuario:
+                lat_p, lon_p, label_p = geocodificar_localidad(localidad_p_usuario)
         else:
-            col_l1, col_l2 = st.columns(2)
-            lat_manual = col_l1.number_input("Latitud (°N):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_t1")
-            lon_manual = col_l2.number_input("Longitud (°E):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_t1")
-            lat, lon, label_punto = lat_manual, lon_manual, f"Coordenadas Puras"
+            col_lp1, col_lp2 = st.columns(2)
+            lat_p_manual = col_lp1.number_input("Latitud exacta (°N):", min_value=float(LAT_MIN), max_value=float(LAT_MAX), value=40.41, step=0.01, key="num_lat_t2")
+            lon_p_manual = col_lp2.number_input("Longitud exacta (°E):", min_value=float(LON_MIN), max_value=float(LON_MAX), value=-3.70, step=0.01, key="num_lon_t2")
+            lat_p, lon_p, label_p = lat_p_manual, lon_p_manual, f"Coordenadas fijas"
 
-        # Procesamiento dinámico del píxel consultado
-        if lat is not None and lon is not None:
-            dentro_europa = (LAT_MIN <= lat <= LAT_MAX) and (LON_MIN <= lon <= LON_MAX)
-            punto_consulta = np.array([[lat, lon]])
-            valor_tecu = float(interp_europa(punto_consulta)[0]) if dentro_europa else float(interp_global(punto_consulta)[0])
-            fuente = "Malla Regional Europa" if dentro_europa else "Malla Planetaria Global"
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric(label="📍 Punto de Entrada", value=label_punto)
-            col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
-            col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
-        else:
-            if tipo_busqueda_t1 == "Buscar por Ciudad/Región": st.error("No se pudo mapear la ciudad.")
+        if lat_p is not None and lon_p is not None:
+            if (LAT_MIN <= lat_p <= LAT_MAX) and (LON_MIN <= lon_p <= LON_MAX):
+                interp_p = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), st.session_state.matriz_pasado, method='linear', bounds_error=False, fill_value=None)
+                val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
+                st.metric(label=f"Intensidad Calculada ({label_p})", value=f"{val_tecu_p:.3f} TECU")
+                st.caption(f"Coordenadas evaluadas: {lat_p:.3f}°N, {lon_p:.3f}°E")
+            else: st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
 
         st.divider()
+        ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa pasado", key="toggle_t2")
         
-        # Interruptor de control para el ajuste de escala local solicitado
-        ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
-        
-        if ajuste_local_t1:
-            vmin_eur, vmax_eur = float(np.min(matriz_vtec_eur)), float(np.max(matriz_vtec_eur))
-            vmin_glb, vmax_glb = float(np.min(matriz_vtec_glb)), float(np.max(matriz_vtec_glb))
-            lbl_status = "Rango de Color Adaptado Localmente"
+        if ajuste_local_t2:
+            vmin_p, vmax_p = float(np.min(st.session_state.matriz_pasado)), float(np.max(st.session_state.matriz_pasado))
+            lbl_status_p = "Rango de Color Adaptado Localmente"
         else:
-            vmin_eur, vmax_eur = VMIN_TECU_FIJO, VMAX_TECU_FIJO
-            vmin_glb, vmax_glb = VMIN_TECU_FIJO, VMAX_TECU_FIJO
-            lbl_status = "Escala Fija Universal (0-55 TECU)"
+            vmin_p, vmax_p = VMIN_TECU_FIJO, VMAX_TECU_FIJO
+            lbl_status_p = "Escala Fija Universal (0-55 TECU)"
 
-        # Construcción y renderizado de la figura dual
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+        fig_p = plt.figure(figsize=(11, 6), dpi=100)
+        ax_p = plt.axes(projection=ccrs.PlateCarree())
+        ax_p.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222')
         
-        # Sub-mapa 1: Malla Regional Europa
-        ax1.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-        ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5')
-        ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-        ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
-        
-        map_eur = ax1.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_eur, vmax=vmax_eur)
-        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC MALLA REGIONAL (TECU) [{lbl_status}]', weight='bold')
+        mapa_p = ax_p.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_p, vmax=vmax_p)
+        plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'VTEC ASSIMILATED (TECU) [{lbl_status_p}]', weight='bold')
+        st.pyplot(fig_p)
+        plt.close(fig_p)
 
-        # Sub-mapa 2: Malla Planetaria Global
-        ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-        ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
-        ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-        ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0)
-        grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
-        
-        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
-        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
-        
-        st.pyplot(fig)
-
-        # -----------------------------------------------------------------
-        # SECCIÓN NUEVA: ENLACES DE INTERÉS Y RECURSOS CIENTÍFICOS
-        # -----------------------------------------------------------------
-        st.divider()
-        st.subheader("🔗 Enlaces de Interés y Recursos Científicos")
-        
-        col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
-        
-        with col_lnk1:
-            st.markdown("#### 🛰️ Proveedores de Datos")
-            st.markdown("- [DLR IMPC Portal](https://impc.dlr.de/) - Centro Alemán de Operaciones Espaciales.")
-            st.markdown("- [IGS Iono](https://igs.org/wg/ionosphere/) - International GNSS Service.")
-            
-        with col_lnk2:
-            st.markdown("#### 📚 Documentación y Ciencia")
-            st.markdown("- [ESA Navipedia - Ionosphere](https://gssc.esa.int/navipedia/) - Retrasos ionosféricos en GNSS.")
-            st.markdown("- [NOAA Space Weather](https://www.swpc.noaa.gov/) - Predicción del clima espacial.")
-            
-        with col_lnk3:
-            st.markdown("#### 🛠️ Herramientas Complementarias")
-            st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
-            st.markdown("- [RTKLIB](http://www.rtklib.com/) - Software de código abierto para posicionamiento GNSS.")
-
-    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 # =====================================================================
 # PESTAÑA 3: EVOLUCIÓN TECU
 # =====================================================================
