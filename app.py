@@ -28,12 +28,13 @@ LATS_EUROPA = np.arange(LAT_MIN, LAT_MAX + DELTA_LAT, DELTA_LAT)
 LONS_EUROPA = np.arange(LON_MIN, LON_MAX + DELTA_LON, DELTA_LON)
 GRID_LON_EUR, GRID_LAT_GRID = np.meshgrid(LONS_EUROPA, LATS_EUROPA)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🌍 Inicio y Monitoreo Real", 
     "📊 Análisis en el pasado", 
     "📈 Evolución TECU", 
     "🔮 Pronóstico", 
-    "📉 Desviaciones del Modelo"
+    "📉 Desviaciones del Modelo",
+    "💬 Comentarios y Feedback"
 ])
 
 def geocodificar_localidad(nombre_lugar):
@@ -169,7 +170,28 @@ with tab1:
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
         st.pyplot(fig)
     except Exception as e: st.error(f"Error en Tiempo Real: {e}")
+# (Este código va justo debajo de st.pyplot(fig) en la pestaña 1)
+        st.divider()
+        st.subheader("🔗 Enlaces de Interés y Recursos Científicos")
+        
+        col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
+        
+        with col_lnk1:
+            st.markdown("#### 🛰️ Proveedores de Datos")
+            st.markdown("- [DLR IMPC Portal](https://impc.dlr.de/) - Centro Alemán de Operaciones Espaciales.")
+            st.markdown("- [IGS Iono](https://igs.org/wg/ionosphere/) - International GNSS Service.")
+            
+        with col_lnk2:
+            st.markdown("#### 📚 Documentación y Ciencia")
+            st.markdown("- [ESA Navipedia - Ionosphere](https://gssc.esa.int/navipedia/) - Retrasos ionosféricos en GNSS.")
+            st.markdown("- [NOAA Space Weather](https://www.swpc.noaa.gov/) - Predicción del clima espacial.")
+            
+        with col_lnk3:
+            st.markdown("#### 🛠️ Herramientas Complementarias")
+            st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
+            st.markdown("- [RTKLIB](http://www.rtklib.com/) - Software de código abierto para posicionamiento GNSS.")
 
+    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 # =====================================================================
 # PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
