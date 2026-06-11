@@ -537,11 +537,11 @@ with tab3:
 # PESTAÑA 4 Y PESTAÑA 5: EN ESPERA (VACÍAS EN REPOSO)
 # =====================================================================
 # =====================================================================
-# PESTAÑA 4: PRONÓSTICO (REESTRUCTURACIÓN COMPLETA BASADA EN TU SCRIPT)
+# PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
 with tab4:
     st.title("🔮 Predicción Científica del VTEC Ionosférico")
-    st.markdown("### Modelo de Climatología + Persistencia Amortiguada (Validación a 3 Horas)")
+    st.markdown("### Motor Predictivo Localizado (Climatología + Persistencia Amortiguada)")
     st.divider()
 
     # Inicialización de la memoria de estado exclusiva para el pronóstico de la pestaña 4
@@ -554,15 +554,27 @@ with tab4:
         st.session_state.p4_mae = 0.0
         st.session_state.p4_acierto = 0.0
         st.session_state.p4_info_punto = ""
+        st.session_state.p4_modo_activo = ""
 
-    # FORMULARIO DE ENTRADA DE CONFIGURACIÓN
-    st.subheader("⚙️ Configuración del Escenario de Análisis")
+    st.subheader("⚙️ Configuración del Escenario Predictivo")
     
     col_p1, col_p2 = st.columns(2)
-    p4_fecha_base = col_p1.date_input("Selecciona la fecha base del historial (24 Horas):", datetime.date(2026, 1, 1), key="p4_date_sel")
     
-    # Sistema dual alternativo de localización solicitado
-    p4_tipo_pos = col_p2.radio("Método de posicionamiento para la predicción:", ["Por Nombre de Ciudad/Región", "Por Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="p4_radio_pos")
+    # 1. SELECTOR INTERACTIVO DE MODO DE TRABAJO (HISTÓRICO O PRESENTE)
+    p4_modo_trabajo = col_p1.radio(
+        "Elige el escenario temporal de ejecución:", 
+        ["Simulación Histórica (Validación Cruzada)", "Pronóstico Operativo en Tiempo Real (Presente Actual)"], 
+        horizontal=False, 
+        key="p4_radio_modo_global"
+    )
+    
+    # 2. SELECTOR DUAL ALTERNATIVO DE LOCALIZACIÓN SOLICITADO
+    p4_tipo_pos = col_p2.radio(
+        "Método de posicionamiento para el receptor:", 
+        ["Por Nombre de Ciudad/Región", "Por Coordenadas Manuales (Lat/Lon)"], 
+        horizontal=True, 
+        key="p4_radio_pos"
+    )
     
     lat_p4, lon_p4, label_p4 = None, None, ""
     
@@ -576,30 +588,43 @@ with tab4:
         lon_p4_num = col_p4_lon.number_input("Longitud del receptor (°E):", min_value=float(LON_MIN), max_value=float(LON_MAX), value=-3.70, step=0.01, key="p4_num_lon")
         lat_p4, lon_p4, label_p4 = lat_p4_num, lon_p4_num, f"Coordenadas Manuales"
 
-    # BOTÓN DE EJECUCIÓN DEL PRONÓSTICO
-    if st.button("🚀 Ejecutar Modelo Matemático", key="p4_btn_run"):
+    st.divider()
+
+    # CONTROL CONDICIONAL DE ENTRADA DE FECHA SEGÚN EL MODO ELEGIDO
+    if p4_modo_trabajo == "Simulación Histórica (Validación Cruzada)":
+        st.markdown("ℹ️ *Este modo descarga un día del pasado completo (pasos de 1h) y lo compara con los datos reales que ocurrieron al día siguiente.*")
+        p4_fecha_base = st.date_input("Selecciona la fecha base del historial pasado (24 Horas):", datetime.date(2026, 1, 1), key="p4_date_sel_hist")
+    else:
+        # Modo Presente Operativo: Calculamos el reloj UTC en tiempo real automáticamente
+        ahora_utc = datetime.datetime.utcnow()
+        minuto_redondeado = (ahora_utc.minute // 5) * 5
+        fecha_base_produccion = ahora_utc.replace(minute=minuto_redondeado, second=0, microsecond=0)
+        
+        st.info(f"🛰️ **Modo Operativo Activo:** El sistema sincronizará el reloj con el servidor del DLR a la última hora de refresco: **{fecha_base_produccion.strftime('%d/%m/%Y a las %H:%M')} UTC**.")
+
+    # =====================================================================
+    # BOTÓN DE EJECUCIÓN DEL PRONÓSTICO DUAL
+    # =====================================================================
+    if st.button("🚀 Calcular Pronóstico Ionosférico", key="p4_btn_run"):
         if lat_p4 is not None and lon_p4 is not None:
             if (LAT_MIN <= lat_p4 <= LAT_MAX) and (LON_MIN <= lon_p4 <= LON_MAX):
                 
-                with st.spinner("Descargando ciclo diurno y computando matriz estacional de inercia..."):
-                    idx_lat_p4 = (np.abs(LATS_EUROPA - lat_p4)).argmin()
-                    idx_lon_p4 = (np.abs(LONS_EUROPA - lon_p4)).argmin()
-                    
-                    headers = {"User-Agent": "Mozilla/5.0"}
-                    minutos_objetivo = [0]
-                    
-                    temp_cronologia_pasado = []
-                    temp_fechas_pasado = []
-                    exito_descarga_p1 = True
-                    
-                    # --- FASE 1: EXTRACCIÓN DEL PASADO (24 HORAS CONSECUTIVAS) ---
-                    for hora_actual in range(24):
-                        for min_obj in minutos_objetivo:
+                idx_lat_p4 = (np.abs(LATS_EUROPA - lat_p4)).argmin()
+                idx_lon_p4 = (np.abs(LONS_EUROPA - lon_p4)).argmin()
+                headers = {"User-Agent": "Mozilla/5.0"}
+                
+                # -----------------------------------------------------------------
+                # RAMAL A: EJECUCIÓN EN MODO SIMULACIÓN HISTÓRICA
+                # -----------------------------------------------------------------
+                if p4_modo_trabajo == "Simulación Histórica (Validación Cruzada)":
+                    with st.spinner("Descargando ciclo diurno histórico para validación cruzada..."):
+                        temp_cronologia_pasado = []
+                        temp_fechas_pasado = []
+                        exito_descarga_p1 = True
+                        
+                        for hora_actual in range(24):
                             link_exitoso = False
-                            # Escáner de contingencia en pasos de 5 min si falla la hora en punto
-                            minutos_contingencia = range(0, 30, 5)
-                            
-                            for m in minutos_contingencia:
+                            for m in range(0, 30, 5):
                                 url_intento = generar_enlace_dlr_seguro(p4_fecha_base.year, p4_fecha_base.month, p4_fecha_base.day, hora_actual, m)
                                 try:
                                     response = requests.get(url_intento, headers=headers, timeout=3)
@@ -608,132 +633,194 @@ with tab4:
                                         link_exitoso = True
                                         break
                                 except Exception: pass
-                                
                             if not link_exitoso:
-                                st.error(f"❌ Enlace roto o ausente en el servidor para la hora {hora_actual:02d}:00 UTC.")
+                                st.error(f"❌ Datos no encontrados para la hora {hora_actual:02d}:00 UTC en el historial.")
                                 exito_descarga_p1 = False
                                 break
-                        if not exito_descarga_p1: break
-                        
-                        vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                        matriz_instante = np.array(vtec_values_list).reshape(43, 81)
-                        temp_cronologia_pasado.append(matriz_instante[idx_lat_p4, idx_lon_p4])
-                        temp_fechas_pasado.append(datetime.datetime(p4_fecha_base.year, p4_fecha_base.month, p4_fecha_base.day) + datetime.timedelta(hours=hora_actual))
+                            
+                            vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                            matriz_instante = np.array(vtec_values_list).reshape(43, 81)
+                            temp_cronologia_pasado.append(matriz_instante[idx_lat_p4, idx_lon_p4])
+                            temp_fechas_pasado.append(datetime.datetime(p4_fecha_base.year, p4_fecha_base.month, p4_fecha_base.day) + datetime.timedelta(hours=hora_actual))
 
-                    if exito_descarga_p1:
-                        vector_vtec_serie = np.array(temp_cronologia_pasado)
+                        if exito_descarga_p1:
+                            vector_vtec_serie = np.array(temp_cronologia_pasado)
+                            temp_cronologia_futuro_real = []
+                            temp_fechas_futuro = []
+                            p4_fecha_futuro_base = datetime.datetime(p4_fecha_base.year, p4_fecha_base.month, p4_fecha_base.day) + datetime.timedelta(days=1)
+                            exito_descarga_p2 = True
+                            
+                            for hora_val in range(3):
+                                link_exitoso = False
+                                for m in range(0, 30, 5):
+                                    url_intento = generar_enlace_dlr_seguro(p4_fecha_futuro_base.year, p4_fecha_futuro_base.month, p4_fecha_futuro_base.day, hora_val, m)
+                                    try:
+                                        response = requests.get(url_intento, headers=headers, timeout=3)
+                                        if response.status_code == 200:
+                                            data_val = response.json()
+                                            link_exitoso = True
+                                            break
+                                    except Exception: pass
+                                if not link_exitoso:
+                                    st.error(f"❌ Sin datos de validación para las {hora_val:02d}:00 UTC del día siguiente.")
+                                    exito_descarga_p2 = False
+                                    break
+                                    
+                                vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data_val['data']['grid']['features']]
+                                matriz_instante = np.array(vtec_values_list).reshape(43, 81)
+                                temp_cronologia_futuro_real.append(matriz_instante[idx_lat_p4, idx_lon_p4])
+                                temp_fechas_futuro.append(p4_fecha_futuro_base + datetime.timedelta(hours=hora_val))
+
+                            if exito_descarga_p2:
+                                vector_real_futuro = np.array(temp_cronologia_futuro_real)
+                                perfil_estacional = np.copy(vector_vtec_serie)
+                                ultimo_valor_real = vector_vtec_serie[-1]
+                                anomalia_inicial = ultimo_valor_real - perfil_estacional[-1]
+                                
+                                vector_prediccion_futura = []
+                                alpha = 0.85
+                                for k in range(1, 4):
+                                    slot_futuro = k % 24
+                                    valor_predicho = perfil_estacional[slot_futuro] + anomalia_inicial * (alpha ** k)
+                                    vector_prediccion_futura.append(valor_predicho)
+                                
+                                vector_prediccion_futura = np.array(vector_prediccion_futura)
+                                mae_calc = float(np.mean(np.abs(vector_real_futuro - vector_prediccion_futura)))
+                                acierto_calc = max(0.0, 100 - (mae_calc / np.mean(vector_real_futuro)) * 100)
+                                
+                                # Volcado a memoria de Streamlit (Modo Histórico)
+                                st.session_state.p4_vector_pasado = vector_vtec_serie
+                                st.session_state.p4_fechas_pasado = temp_fechas_pasado
+                                st.session_state.p4_vector_futuro_real = vector_real_futuro
+                                st.session_state.p4_vector_futuro_calc = vector_prediccion_futura
+                                st.session_state.p4_fechas_futuro = temp_fechas_futuro
+                                st.session_state.p4_mae = mae_calc
+                                st.session_state.p4_acierto = acierto_calc
+                                st.session_state.p4_modo_activo = "HISTÓRICO"
+                                st.session_state.p4_info_punto = f"{label_p4} | Coordenadas: {lat_p4:.3f}°N, {lon_p4:.3f}°E"
+                                st.success("🎯 Simulación histórica calculada con éxito.")
+
+                # -----------------------------------------------------------------
+                # RAMAL B: EJECUCIÓN EN MODO TIEMPO REAL OPERATIVO (PRESENTE)
+                # -----------------------------------------------------------------
+                else:
+                    with st.spinner("Sincronizando con el reloj del DLR y extrayendo las últimas 24 horas reales..."):
+                        temp_cronologia_presente = []
+                        temp_fechas_presente = []
+                        exito_descarga_rt = True
                         
-                        # --- FASE 2: DESCARGA DE LOS 3 PUNTOS REALES DEL FUTURO PARA VALIDACIÓN ---
-                        temp_cronologia_futuro_real = []
-                        temp_fechas_futuro = []
-                        p4_fecha_futuro_base = datetime.datetime(p4_fecha_base.year, p4_fecha_base.month, p4_fecha_base.day) + datetime.timedelta(days=1)
-                        exito_descarga_p2 = True
-                        
-                        for hora_val in range(3): # 3 horas fijas hacia adelante
+                        # Descargamos las últimas 12 muestras bihorarias (24 horas hacia atrás desde hoy)
+                        for i in range(11, -1, -1):
+                            fecha_muestra = fecha_base_produccion - datetime.timedelta(hours=i * 2)
                             link_exitoso = False
+                            minutos_contingencia = [fecha_muestra.minute, 0, 5, 10, 15, 20, 25, 30]
+                            
                             for m in minutos_contingencia:
-                                url_intento = generar_enlace_dlr_seguro(p4_fecha_futuro_base.year, p4_fecha_futuro_base.month, p4_fecha_futuro_base.day, hora_val, m)
+                                url_intento = generar_enlace_dlr_seguro(fecha_muestra.year, fecha_muestra.month, fecha_muestra.day, fecha_muestra.hour, m)
                                 try:
                                     response = requests.get(url_intento, headers=headers, timeout=3)
                                     if response.status_code == 200:
-                                        data_val = response.json()
+                                        data_rt = response.json()
                                         link_exitoso = True
                                         break
                                 except Exception: pass
                                 
                             if not link_exitoso:
-                                st.error(f"❌ No se encontraron datos de validación real para el día siguiente a las {hora_val:02d}:00 UTC.")
-                                exito_descarga_p2 = False
+                                st.error(f"❌ Imposible construir el pasado reciente. Datos ausentes del día {fecha_muestra.strftime('%d/%m')} a las {fecha_muestra.hour:02d}h UTC.")
+                                exito_descarga_rt = False
                                 break
                                 
-                            vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data_val['data']['grid']['features']]
+                            vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data_rt['data']['grid']['features']]
                             matriz_instante = np.array(vtec_values_list).reshape(43, 81)
-                            temp_cronologia_futuro_real.append(matriz_instante[idx_lat_p4, idx_lon_p4])
-                            temp_fechas_futuro.append(p4_fecha_futuro_base + datetime.timedelta(hours=hora_val))
+                            temp_cronologia_presente.append(matriz_instante[idx_lat_p4, idx_lon_p4])
+                            temp_fechas_presente.append(fecha_muestra)
 
-                        if exito_descarga_p2:
-                            vector_real_futuro = np.array(temp_cronologia_futuro_real)
+                        if exito_descarga_rt:
+                            vector_vtec_serie_rt = np.array(temp_cronologia_presente)
                             
-                            # --- FASE 3: EJECUCIÓN DEL MODELO MATEMÁTICO AUTORREGRESIVO ---
-                            periodo = 24            # 24 muestras por día
-                            puntos_prediccion = 3   # 3 puntos adelante
+                            # Proyección hacia el futuro desconocido e inexistente (+6 horas adelante)
+                            perfil_estacional_rt = np.copy(vector_vtec_serie_rt)
+                            ultimo_valor_real_rt = vector_vtec_serie_rt[-1]
+                            ultimo_slot_horario_rt = len(vector_vtec_serie_rt) - 1
                             
-                            perfil_estacional = np.zeros(periodo)
-                            for i in range(periodo):
-                                # Al ser un escenario intradía de 24h, la media estacional equivale al valor directo
-                                perfil_estacional[i] = vector_vtec_serie[i]
+                            vector_prediccion_futura_rt = []
+                            temp_fechas_futuro_rt = []
+                            alpha = 0.85
+                            
+                            for k in range(1, 4):
+                                fecha_fut_inst = fecha_base_produccion + datetime.timedelta(hours=k * 2)
+                                temp_fechas_futuro_rt.append(fecha_fut_inst)
+                                slot_futuro = (ultimo_slot_horario_rt + k) % 12
+                                valor_predicho_rt = perfil_estacional_rt[slot_futuro] + (ultimo_valor_real_rt - perfil_estacional_rt[ultimo_slot_horario_rt]) * (alpha ** k)
+                                vector_prediccion_futura_rt.append(valor_predicho_rt)
                                 
-                            ultimo_valor_real = vector_vtec_serie[-1]
-                            ultimo_slot_horario = (len(vector_vtec_serie) - 1) % periodo
-                            anomalia_inicial = ultimo_valor_real - perfil_estacional[ultimo_slot_horario]
-                            
-                            vector_prediccion_futura = []
-                            alpha = 0.85 # Coeficiente estricto de inercia ionosférica
-                            
-                            for k in range(1, puntos_prediccion + 1):
-                                slot_futuro = (ultimo_slot_horario + k) % periodo
-                                valor_predicho = perfil_estacional[slot_futuro] + anomalia_inicial * (alpha ** k)
-                                vector_prediccion_futura.append(valor_predicho)
-                                
-                            vector_prediccion_futura = np.array(vector_prediccion_futura)
-                            
-                            # Cómputo de la precisión analítica en consola/pantalla
-                            errores_punto_a_punto = np.abs(vector_real_futuro - vector_prediccion_futura)
-                            mae_calculado = float(np.mean(errores_punto_a_punto))
-                            acierto_calculado = max(0.0, 100 - (mae_calculado / np.mean(vector_real_futuro)) * 100)
-                            
-                            # Volcar todas las variables calculadas de forma segura a la memoria de Streamlit
-                            st.session_state.p4_vector_pasado = vector_vtec_serie
-                            st.session_state.p4_fechas_pasado = temp_fechas_pasado
-                            st.session_state.p4_vector_futuro_real = vector_real_futuro
-                            st.session_state.p4_vector_futuro_calc = vector_prediccion_futura
-                            st.session_state.p4_fechas_futuro = temp_fechas_futuro
-                            st.session_state.p4_mae = mae_calculado
-                            st.session_state.p4_acierto = acierto_calculado
+                            # Volcar a memoria de Streamlit (Modo Tiempo Real)
+                            st.session_state.p4_vector_pasado = vector_vtec_serie_rt
+                            st.session_state.p4_fechas_pasado = temp_fechas_presente
+                            st.session_state.p4_vector_futuro_real = None  # No existe en el presente actual
+                            st.session_state.p4_vector_futuro_calc = np.array(vector_prediccion_futura_rt)
+                            st.session_state.p4_fechas_futuro = temp_fechas_futuro_rt
+                            st.session_state.p4_modo_activo = "TIEMPO_REAL"
                             st.session_state.p4_info_punto = f"{label_p4} | Coordenadas: {lat_p4:.3f}°N, {lon_p4:.3f}°E"
-                            
-                            st.success("🎯 Modelo ejecutado y pronóstico verificado correctamente.")
+                            st.success("🔮 Modelo operativo en tiempo real ejecutado. Proyección a +6 horas completada.")
             else:
                 st.error("❌ Las coordenadas ingresadas se encuentran fuera de la cuadrícula de Europa.")
-        else:
-            st.error("❌ Especifica una ciudad válida o un par de coordenadas Lat/Lon numéricas.")
 
-    # DESPLIEGUE GRÁFICO (REPLICA EXACTA DE TU DISEÑO INYECTADO)
+    # =====================================================================
+    # 3. DESPLIEGUE GRÁFICO INTELIGENTE ADAPTADO SEGÚN EL MODO ACTIVO
+    # =====================================================================
     if st.session_state.p4_vector_pasado is not None:
         st.divider()
         
-        # Cuadro de KPIS de control analítico de fiabilidad
-        col_k1, col_k2, col_k3 = st.columns(3)
-        col_k1.metric(label="📊 Error Absoluto Medio (MAE)", value=f"{st.session_state.p4_mae:.3f} TECU")
-        col_k2.metric(label="🎯 Porcentaje Estimado de Acierto", value=f"{st.session_state.p4_acierto:.1f} %")
-        col_k3.info(f"**Ubicación de Análisis:**\n{st.session_state.p4_info_punto}")
-        
-        # Selector interactivo de rango vertical solicitado
+        # Renderizado condicional de los KPI en la cabecera del gráfico
+        if st.session_state.p4_modo_activo == "HISTÓRICO":
+            col_k1, col_k2, col_k3 = st.columns(3)
+            col_k1.metric(label="📊 Error Medio Absoluto (MAE)", value=f"{st.session_state.p4_mae:.3f} TECU")
+            col_k2.metric(label="🎯 Porcentaje Estimado de Acierto", value=f"{st.session_state.p4_acierto:.1f} %")
+            col_k3.info(f"**Ubicación de Análisis:**\n{st.session_state.p4_info_punto}")
+        else:
+            col_k1, col_k2 = st.columns([1, 2])
+            col_k1.metric(label="📡 Estado del Transmisor DLR", value="ONLINE (Operativo)")
+            col_k2.info(f"**Modo de Pronóstico Directo:** Lanzado en Vivo para:\n{st.session_state.p4_info_punto}")
+
         p4_toggle_ejes = st.toggle("🔍 Activar regla +-2 local en el Eje Y (Optimizar visualización)", key="toggle_p4_ejes")
         
         fig_p4, ax_p4 = plt.subplots(figsize=(15, 6), dpi=100)
         
-        # 1. Pasado inmediato real (Línea Azul con marcadores redondos)
+        # 1. Pasado Real Registrado (Línea Azul con marcadores redondos)
         ax_p4.plot(st.session_state.p4_fechas_pasado, st.session_state.p4_vector_pasado, 
-                   color='#2979ff', linewidth=2, label='Pasado Inmediato Real (DLR)', marker='o', markersize=4)
+                   color='#1565c0', linewidth=2.5, label='Pasado Registrado (Datos Reales DLR)', marker='o', markersize=5)
         
-        # 2. Predicción matemática (Línea discontinua naranja con marcadores 'x')
-        ax_p4.plot(st.session_state.p4_fechas_futuro, st.session_state.p4_vector_futuro_calc, 
-                   color='#ff3d00', linewidth=2.5, linestyle='--', label='Predicción Matemática', marker='x', zorder=4)
+        # Conectamos visualmente la última muestra real con el inicio de la línea de predicción
+        fechas_linea_prediccion = [st.session_state.p4_fechas_pasado[-1]] + st.session_state.p4_fechas_futuro
+        valores_linea_prediccion = [st.session_state.p4_vector_pasado[-1]] + list(st.session_state.p4_vector_futuro_calc)
+
+        # 2. Línea Roja Discontinua con la Predicción Matemática
+        lbl_roja = 'Predicción Matemática (Horizonte 3h)' if st.session_state.p4_modo_activo == "HISTÓRICO" else 'Predicción Matemática Operativa (+6 Horas Futuras)'
+        ax_p4.plot(fechas_linea_prediccion, valores_linea_prediccion, 
+                   color='#d50000', linewidth=2.5, linestyle='--', label=lbl_roja, marker='x', markersize=6, zorder=4)
         
-        # 3. Datos reales de validación (Línea verde continua con marcadores cuadrados)
-        ax_p4.plot(st.session_state.p4_fechas_futuro, st.session_state.p4_vector_futuro_real, 
-                   color='#00e676', linewidth=2.5, label='Datos Reales de Validación', marker='s', markersize=5, zorder=3)
-        
-        # Sombreado del margen de error translúcido entre la realidad y la predicción
-        ax_p4.fill_between(st.session_state.p4_fechas_futuro, st.session_state.p4_vector_futuro_calc, st.session_state.p4_vector_futuro_real, 
-                           color='#ff3d00', alpha=0.1, label='Margen de Error')
-        
+        # 3. Renderizado condicional del ramal elegido
+        if st.session_state.p4_modo_activo == "HISTÓRICO":
+            # Si es histórico pintamos la línea verde de validación real
+            ax_p4.plot(st.session_state.p4_fechas_futuro, st.session_state.p4_vector_futuro_real, 
+                       color='#00e676', linewidth=2.5, label='Datos Reales de Validación', marker='s', markersize=5, zorder=3)
+            ax_p4.fill_between(st.session_state.p4_fechas_futuro, st.session_state.p4_vector_futuro_calc, st.session_state.p4_vector_futuro_real, 
+                               color='#ff3d00', alpha=0.1, label='Margen de Error')
+            str_titulo_modo = "SIMULACIÓN HISTÓRICA CON VALIDACIÓN"
+        else:
+            # Si es tiempo real pintamos el sombreado rosa de "zona de pronóstico hacia el futuro" de tu script
+            ax_p4.axvspan(st.session_state.p4_fechas_pasado[-1], st.session_state.p4_fechas_futuro[-1], 
+                          color='#ffebee', alpha=0.5, label='Zona de Pronóstico Ionosférico')
+            str_titulo_modo = f"TIEMPO REAL OPERATIVO (ACTIVO HASTA LAS {st.session_state.p4_fechas_futuro[-1].strftime('%H:%M')} UTC)"
+
         ax_p4.grid(True, linestyle='--', alpha=0.5)
         
         # Control estricto de los límites verticales del eje Y
         if p4_toggle_ejes:
-            valores_totales = np.concatenate([st.session_state.p4_vector_pasado, st.session_state.p4_vector_futuro_real, st.session_state.p4_vector_futuro_calc])
+            valores_totales = np.concatenate([st.session_state.p4_vector_pasado, st.session_state.p4_vector_futuro_calc])
+            if st.session_state.p4_vector_futuro_real is not None:
+                valores_totales = np.concatenate([valores_totales, st.session_state.p4_vector_futuro_real])
             Y_MIN_VAL = max(0.0, float(np.floor(np.min(valores_totales) - 2)))
             Y_MAX_VAL = float(np.ceil(np.max(valores_totales) + 2))
             ax_p4.set_ylim(Y_MIN_VAL, Y_MAX_VAL)
@@ -742,13 +829,13 @@ with tab4:
             ax_p4.set_ylim(VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             str_escala = f"Escala Universal Fija: {int(VMIN_TECU_FIJO)}-{int(VMAX_TECU_FIJO)} TECU"
             
-        # Formateador horario elegante para el eje temporal X en formato DD/MM y HH:MM
+        # Formateador de tiempo del eje X
         ax_p4.xaxis.set_major_locator(mdates.HourLocator(interval=2))
         ax_p4.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m\n%H:%M'))
         
-        plt.xlabel("Línea Temporal de Control (UTC)", fontsize=11, weight='bold')
-        plt.ylabel("Intensidad VTEC (TECU)", fontsize=11, weight='bold')
-        plt.title(f"TEST DE VELOCIDAD: PREDICCIÓN A 3 HORAS\n[Eje Y Controlado con {str_escala}]", fontsize=12, weight='bold', pad=15)
+        plt.xlabel("Escala Temporal Unificada (UTC)", fontsize=11, weight='bold')
+        plt.ylabel("Contenido Total de Electrones - VTEC (TECU)", fontsize=11, weight='bold')
+        plt.title(f"PRONÓSTICO DE TEC EN EUROPA [{str_titulo_modo}]\n[Eje Y Controlado con {str_escala}]", fontsize=12, weight='bold', pad=15)
         
         plt.legend(loc='upper left')
         plt.tight_layout()
@@ -756,7 +843,11 @@ with tab4:
         st.pyplot(fig_p4)
         plt.close(fig_p4)
 
-
+        # Imprime la telemetría textual abajo del mapa si es el modo operativo real
+        if st.session_state.p4_modo_activo == "TIEMPO_REAL":
+            st.info("### 📡 Telemetría de Proyección de Contenido Electrónico Futuro:")
+            for idx, f_fut in enumerate(st.session_state.p4_fechas_futuro):
+                st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
 
 # =====================================================================
 # PESTAÑA 6: COMENTARIOS Y FEEDBACK
