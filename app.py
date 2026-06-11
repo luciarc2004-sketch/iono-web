@@ -242,7 +242,7 @@ with tab2:
     if st.session_state.matriz_pasado is not None:
         st.divider()
         
-        st.divider()
+
         ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa pasado", key="toggle_t2")
         
         if ajuste_local_t2:
@@ -264,7 +264,7 @@ with tab2:
         st.pyplot(fig_p)
         plt.close(fig_p)
 
-
+        st.divider()
         st.subheader("📍 Valor VTEC de un punto")
         
         # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 2)
