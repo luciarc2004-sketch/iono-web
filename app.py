@@ -283,12 +283,12 @@ with tab2:
         st.pyplot(fig_p)
         plt.close(fig_p)
 # =====================================================================
-# PESTAÑA 3: EVOLUCIÓN TECU (ACTUALIZADA CON MODO DÍAS COMPLETOS)
+# PESTAÑA 3: EVOLUCIÓN TECU (CÓDIGO ENTERO REESTRUCTURADO)
 # =====================================================================
 with tab3:
     st.title("📈 Estudio de Evolución Temporal del TECU")
     
-    # Añadimos la tercera opción solicitada: "Días Completos"
+    # Selector unificado en la cabecera con las tres opciones oficiales
     modo_evolucion = st.radio(
         "Selecciona el tipo de análisis temporal:", 
         ["Por Días (Hora Fija)", "Por Horas (24h Único Día)", "Días Completos (Rango Continuo)"], 
@@ -297,7 +297,7 @@ with tab3:
     )
 
     # =====================================================================
-    # MODO 1: POR DÍAS (HORA FIJA)
+    # BLOQUE 1: POR DÍAS (HORA FIJA)
     # =====================================================================
     if modo_evolucion == "Por Días (Hora Fija)":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
@@ -325,7 +325,7 @@ with tab3:
                             response = requests.get(url_intento, headers=headers, timeout=4)
                             if response.status_code == 200:
                                 data = response.json()
-                                link_exitoso, minuto_exitoso = True, m
+                                link_exitoso = True
                                 break
                         except Exception: pass
 
@@ -336,15 +336,14 @@ with tab3:
 
                     vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                     temp_3d[d, :, :] = np.array(vtec_values_list).reshape(43, 81)
-                    temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} ({hora_fija_sel:02d}:{minuto_exitoso:02d})")
+                    temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} ({hora_fija_sel:02d}:00)")
 
                 if exito_total:
                     st.session_state.historial_vtec_3d = temp_3d
                     st.session_state.etiquetas_fechas_reales = temp_etiquetas
                     st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                    st.success("📊 Rango temporal procesado.")
+                    st.success("📊 Rango temporal pasado procesado.")
 
-        # [El código de renderizado de mapas y gráficas acumuladas para "Por Días" se mantiene idéntico al de tu archivo base...]
         if st.session_state.historial_vtec_3d is not None:
             ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
             vmin_d, vmax_d = (max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.historial_vtec_3d) + 2))) if ajuste_local_t3_dias else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
@@ -381,7 +380,7 @@ with tab3:
                 st.pyplot(fig_lineas); plt.close(fig_lineas)
 
     # =====================================================================
-    # MODO 2: POR HORAS (24H ÚNICO DÍA)
+    # BLOQUE 2: POR HORAS (24H ÚNICO DÍA)
     # =====================================================================
     elif modo_evolucion == "Por Horas (24h Único Día)":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
@@ -459,13 +458,12 @@ with tab3:
                 ax_lineas_h.grid(True, linestyle='--'); ax_lineas_h.set_ylim(vmin_h, vmax_h); ax_lineas_h.set_xticks(range(24)); ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45); ax_lineas_h.legend(loc="upper right")
                 st.pyplot(fig_lineas_h); plt.close(fig_lineas_h)
 
- # =====================================================================
-    # NUEVO MODO 3: DÍAS COMPLETOS (RANGO CONTINUO HORARIO ENCADENADO)
+    # =====================================================================
+    # BLOQUE 3: DÍAS COMPLETOS (RANGO CONTINUO HORARIO ENCADENADO)
     # =====================================================================
     elif modo_evolucion == "Días Completos (Rango Continuo)":
         st.subheader("📆 Análisis de Evolución Temporal Continua (24h x N Días)")
         
-        # Estructura de estados independiente para el modo continuo masivo
         if 'dc_historial_vtec_3d' not in st.session_state:
             st.session_state.dc_historial_vtec_3d = None
             st.session_state.dc_etiquetas_reales = []
@@ -476,7 +474,6 @@ with tab3:
         dc_fecha_inicial = col_dc1.date_input("Fecha Inicial del rango:", datetime.date(2026, 1, 20), key="dc_fecha_ini")
         dc_num_dias = col_dc2.slider("Número de días completos a encadenar:", 2, 7, 3, key="dc_num_dias_slider")
 
-        # Puntos totales calculados (24 horas por el número de días)
         total_horas_rango = dc_num_dias * 24
 
         if st.button("🚀 Procesar Días Completos (Línea Continua)", key="btn_ev_dc"):
@@ -509,8 +506,6 @@ with tab3:
 
                         vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
                         dc_temp_3d[contador_hora_global, :, :] = np.array(vtec_values_list).reshape(43, 81)
-                        
-                        # Guardamos etiqueta con formato Día/Mes y Hora
                         dc_temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} - {h:02d}h")
                         contador_hora_global += 1
                         
@@ -534,15 +529,11 @@ with tab3:
             ax_mxdc.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
             ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
             
-            grid_dc = ax_mxdc.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
-            grid_dc.top_labels, grid_dc.right_labels = False, False
-            
             mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
             fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
-            st.pyplot(fig_max_dc)
-            plt.close(fig_max_dc)
+            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
 
-            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (NUEVO CÓDIGO INYECTADO)
+            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (FLAMES MAPS)
             st.subheader("🎬 Reproductor Dinámico de la Evolución Continuada")
             if st.button("▶️ Reproducir Serie Completa Frame por Frame", key="btn_play_dc_frames"):
                 contenedor_dc_anim = st.empty()
@@ -554,9 +545,6 @@ with tab3:
                     ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
                     ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
                     
-                    grid_a = ax_a.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
-                    grid_a.top_labels, grid_a.right_labels = False, False
-                    
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_historial_vtec_3d[f, :, :], 
                                               transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
                     plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
@@ -564,9 +552,9 @@ with tab3:
                     
                     contenedor_dc_anim.pyplot(fig_a)
                     plt.close(fig_a)
-                    time.sleep(0.25) # Velocidad ligeramente acelerada por ser más cantidad de frames
+                    time.sleep(0.25)
 
-            # 3. GRÁFICA DE LOCALIZACIÓN (TECU VS TIEMPO CONSECUTIVO)
+            # 3. GRÁFICA DE LOCALIZACIÓN CONTINUA (CIUDAD / COORDENADAS)
             st.subheader("📊 Gráfica Continua del Ciclo de Días Completos Encadenados")
             tipo_busqueda_t3dc = st.radio("Formato de inserción de localidad (Modo Continuo):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3dc")
             lat_dcl, lon_dcl, name_dcl = None, None, ""
@@ -595,13 +583,9 @@ with tab3:
                 ax_lineas_dc.set_ylim(vmin_dc, vmax_dc)
                 ax_lineas_dc.set_xticks(range(len(st.session_state.dc_etiquetas_reales)))
                 ax_lineas_dc.set_ylabel("TECU", weight='bold')
-                
-                # Pintamos una muestra en el eje X cada 6 horas para que no se amontone el texto
                 ax_lineas_dc.set_xticklabels([st.session_state.dc_etiquetas_reales[k] if k % 6 == 0 else "" for k in range(len(st.session_state.dc_etiquetas_reales))], rotation=45, fontsize=8)
                 ax_lineas_dc.legend(loc="upper right")
-                st.pyplot(fig_lineas_dc)
-                plt.close(fig_lineas_dc)
-
+                st.pyplot(fig_lineas_dc); plt.close(fig_lineas_dc)
 # =====================================================================
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
