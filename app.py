@@ -110,10 +110,8 @@ with tab1:
         interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
         interp_global = RegularGridInterpolator((lats_glb, lats_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
-        
-        st.divider()
-        
-        # Interruptor de control para el ajuste de escala local solicitado
+
+     # Interruptor de control para el ajuste de escala local solicitado
         ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
         
         if ajuste_local_t1:
@@ -147,6 +145,11 @@ with tab1:
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
 
+
+        st.pyplot(fig)
+        st.divider()
+        
+   
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
         
         # Sistema dual alternativo de entrada de localización
@@ -179,7 +182,7 @@ with tab1:
             if tipo_busqueda_t1 == "Buscar por Ciudad/Región": st.error("No se pudo mapear la ciudad.")
 
         
-        st.pyplot(fig)
+    
 
         # -----------------------------------------------------------------
         #  ENLACES DE INTERÉS Y RECURSOS 
@@ -1155,7 +1158,7 @@ with tab6:
 
     # Formulario estético de recogida de información
     with st.form("formulario_feedback", clear_on_submit=False):
-        nombre = st.text_input("👤 Tu Nombre / Institución:", placeholder="Ej. Laboratorio de Geomagnetismo UCLM")
+        nombre = st.text_input("👤 Tu Nombre / Institución:", placeholder="Ej. Laboratorio INAIA UCLM")
         email_usuario = st.text_input("📧 Correo electrónico de contacto:", placeholder="ejemplo@correo.com")
         
         tipo_comentario = st.selectbox(
