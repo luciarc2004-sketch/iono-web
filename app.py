@@ -1143,7 +1143,7 @@ with tab5:
 with tab6:
     st.title("💬 Buzón de Sugerencias y Feedback")
     st.markdown("""
-    Tu opinión es fundamental para seguir mejorando los algoritmos de predicción e interpolación del portal. 
+    Tu opinión es fundamental para seguir mejorando. 
     Utiliza este formulario para reportar errores, proponer nuevas herramientas o comentar tu experiencia.
     """)
     st.divider()
@@ -1155,7 +1155,7 @@ with tab6:
         
         tipo_comentario = st.selectbox(
             "📌 Tipo de aportación:",
-            ["Sugerencia de mejora", "Reportar un fallo (Bug)", "Felicitación / Feedback general", "Petición de colaboración científica"]
+            ["Sugerencia de mejora", "Reportar un fallo", "Opinión", "Petición de código"]
         )
         
         comentario = st.text_area("✍️ Escribe aquí tus comentarios o detalles del error:", height=150)
