@@ -852,7 +852,6 @@ with tab4:
 # =====================================================================
 with tab5:
     st.title("📉 Informe Analítico de Desviaciones e Incertidumbre")
-    st.markdown("### Auditoría de Calidad Espacial y Errores de Modelado en Metros")
     st.divider()
 
     # Variables de estado de sesión persistentes para evitar descargas duplicadas
@@ -1024,7 +1023,6 @@ with tab5:
             grid_d.top_labels, grid_d.right_labels = False, False
             grid_d.xformatter, grid_d.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
-            # Renderizado del mapa de desviación con paleta sísmica (Blanco = 0 Error)
             mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
                                          transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
             plt.colorbar(mapa_d, ax=ax_p5_d, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
@@ -1032,18 +1030,27 @@ with tab5:
             st.pyplot(fig_p5_d)
             plt.close(fig_p5_d)
 
-            # Reproductor dinámico en la misma pestaña para ver los 24 frames del día
+            # Reproductor dinámico - CORREGIDO CON PROYECCIÓN CARTOPY INTRADÍA
             st.subheader("🎬 Reproductor Dinámico de la Desviación (24 Horas)")
             if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
                 contenedor_p5_anim = st.empty()
                 for f in range(24):
-                    fig_a, ax_a = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    fig_a = plt.figure(figsize=(11, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
                     ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    grid_a = ax_a.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+                    grid_a.top_labels, grid_a.right_labels = False, False
+                    grid_a.xformatter, grid_a.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+                    
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
-                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5)
-                    fig_a.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('DESVIACIÓN EN METROS', weight='bold')
+                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('DESVIACIÓN EN METROS', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
                     contenedor_p5_anim.pyplot(fig_a)
                     plt.close(fig_a)
                     time.sleep(0.4)
@@ -1072,14 +1079,12 @@ with tab5:
             grid_r.top_labels, grid_r.right_labels = False, False
             grid_r.xformatter, grid_r.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
-            # Renderizado del mapa de incertidumbre con la paleta secuencial cálida
             mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
                                          transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
             plt.colorbar(mapa_r, ax=ax_p5_r, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
             ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
             st.pyplot(fig_p5_r)
             plt.close(fig_p5_r)
-
 
 # =====================================================================
 # PESTAÑA 6: COMENTARIOS Y FEEDBACK
