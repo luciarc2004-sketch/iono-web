@@ -459,7 +459,7 @@ with tab3:
                 ax_lineas_h.grid(True, linestyle='--'); ax_lineas_h.set_ylim(vmin_h, vmax_h); ax_lineas_h.set_xticks(range(24)); ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45); ax_lineas_h.legend(loc="upper right")
                 st.pyplot(fig_lineas_h); plt.close(fig_lineas_h)
 
-    # =====================================================================
+ # =====================================================================
     # NUEVO MODO 3: DÍAS COMPLETOS (RANGO CONTINUO HORARIO ENCADENADO)
     # =====================================================================
     elif modo_evolucion == "Días Completos (Rango Continuo)":
@@ -526,14 +526,47 @@ with tab3:
             ajuste_local_dc = st.toggle("🔍 Optimizar rango vertical al Máx/Mín local de esta serie masiva", key="toggle_dc_ejes")
             vmin_dc, vmax_dc = (max(0.0, float(np.floor(np.min(st.session_state.dc_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.dc_historial_vtec_3d) + 2))) if ajuste_local_dc else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
+            # 1. MAPA DE MÁXIMOS ABSOLUTOS
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Rango Completo")
             fig_max_dc, ax_mxdc = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxdc.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_mxdc.add_feature(cfeature.LAND, facecolor='#f6f6f6'); ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mxdc.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            ax_mxdc.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+            ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
+            
+            grid_dc = ax_mxdc.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+            grid_dc.top_labels, grid_dc.right_labels = False, False
+            
             mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
             fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
-            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
+            st.pyplot(fig_max_dc)
+            plt.close(fig_max_dc)
 
+            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (NUEVO CÓDIGO INYECTADO)
+            st.subheader("🎬 Reproductor Dinámico de la Evolución Continuada")
+            if st.button("▶️ Reproducir Serie Completa Frame por Frame", key="btn_play_dc_frames"):
+                contenedor_dc_anim = st.empty()
+                for f in range(len(st.session_state.dc_etiquetas_reales)):
+                    fig_a = plt.figure(figsize=(11, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    grid_a = ax_a.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+                    grid_a.top_labels, grid_a.right_labels = False, False
+                    
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_historial_vtec_3d[f, :, :], 
+                                              transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    ax_a.set_title(f"FRAME HORARIO CONTINUO: {st.session_state.dc_etiquetas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
+                    contenedor_dc_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(0.25) # Velocidad ligeramente acelerada por ser más cantidad de frames
+
+            # 3. GRÁFICA DE LOCALIZACIÓN (TECU VS TIEMPO CONSECUTIVO)
             st.subheader("📊 Gráfica Continua del Ciclo de Días Completos Encadenados")
             tipo_busqueda_t3dc = st.radio("Formato de inserción de localidad (Modo Continuo):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3dc")
             lat_dcl, lon_dcl, name_dcl = None, None, ""
@@ -554,19 +587,20 @@ with tab3:
             if st.session_state.dc_ciudades_lista:
                 fig_lineas_dc, ax_lineas_dc = plt.subplots(figsize=(15, 5.5))
                 for ciudad_obj in st.session_state.dc_ciudades_lista:
-                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin(); idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
+                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin()
+                    idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
                     ax_lineas_dc.plot(range(len(st.session_state.dc_etiquetas_reales)), st.session_state.dc_historial_vtec_3d[:, idx_lat, idx_lon], linewidth=2, label=ciudad_obj['name'])
                 
                 ax_lineas_dc.grid(True, linestyle='--')
                 ax_lineas_dc.set_ylim(vmin_dc, vmax_dc)
                 ax_lineas_dc.set_xticks(range(len(st.session_state.dc_etiquetas_reales)))
+                ax_lineas_dc.set_ylabel("TECU", weight='bold')
                 
-                # Para evitar una gráfica saturada de etiquetas de texto en el eje X, pintamos una muestra cada 6 horas
+                # Pintamos una muestra en el eje X cada 6 horas para que no se amontone el texto
                 ax_lineas_dc.set_xticklabels([st.session_state.dc_etiquetas_reales[k] if k % 6 == 0 else "" for k in range(len(st.session_state.dc_etiquetas_reales))], rotation=45, fontsize=8)
                 ax_lineas_dc.legend(loc="upper right")
-                st.pyplot(fig_lineas_dc); plt.close(fig_lineas_dc)
-
-
+                st.pyplot(fig_lineas_dc)
+                plt.close(fig_lineas_dc)
 
 # =====================================================================
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
