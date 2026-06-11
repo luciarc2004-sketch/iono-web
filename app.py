@@ -533,9 +533,8 @@ with tab3:
                 st.pyplot(fig_lineas_h)
                 plt.close(fig_lineas_h)
 
-# =====================================================================
-# PESTAÑA 4 Y PESTAÑA 5: EN ESPERA (VACÍAS EN REPOSO)
-# =====================================================================
+
+
 # =====================================================================
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
@@ -848,6 +847,239 @@ with tab4:
             st.info("### 📡 Telemetría de Proyección de Contenido Electrónico Futuro:")
             for idx, f_fut in enumerate(st.session_state.p4_fechas_futuro):
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
+# =====================================================================
+# PESTAÑA 5: DESVIACIONES DEL MODELO (REESTRUCTURACIÓN PILARES 1 Y 2)
+# =====================================================================
+with tab5:
+    st.title("📉 Informe Analítico de Desviaciones e Incertidumbre")
+    st.markdown("### Auditoría de Calidad Espacial y Errores de Modelado en Metros")
+    st.divider()
+
+    # Variables de estado de sesión persistentes para evitar descargas duplicadas
+    if 'p5_historial_real_3d' not in st.session_state:
+        st.session_state.p5_historial_real_3d = None
+        st.session_state.p5_historial_rms_3d = None
+        st.session_state.p5_historial_model_3d = None
+        st.session_state.p5_historial_desviacion_3d = None
+        st.session_state.p5_etiquetas_fechas_reales = []
+        st.session_state.p5_fecha_info = ""
+
+    # Tabla física de frecuencias de las señales base
+    FRECUENCIAS_GNSS_P5 = {
+        "GPS (L1 - 1575.42 MHz)": 1575.42 * 1e6,
+        "Galileo (E1 - 1575.42 MHz)": 1575.42 * 1e6,
+        "GLONASS (G1 - 1602.00 MHz)": 1602.00 * 1e6,
+        "BeiDou (B1I - 1561.10 MHz)": 1561.10 * 1e6
+    }
+
+    # CONTROLES PRINCIPALES DE DESCARGA
+    st.subheader("📥 Extracción y Configuración de Datos Diarios")
+    col_v1, col_v2, col_v3 = st.columns(3)
+    p5_fecha = col_v1.date_input("Selecciona la Fecha a Auditar:", datetime.date(2026, 1, 24), key="p5_date_calendar")
+    p5_constelacion = col_v2.selectbox("📡 Señal GNSS de Referencia:", list(FRECUENCIAS_GNSS_P5.keys()), key="p5_select_freq")
+    p5_hora_vista = col_v3.slider("Hora de Observación Estática (UTC):", 0, 23, 13, key="p5_hour_static")
+
+    # Factor de conversión unificado de tu ecuación física de refracción
+    f_hz_p5 = FRECUENCIAS_GNSS_P5[p5_constelacion]
+    FACTOR_METROS_P5 = (40.3 / (f_hz_p5 ** 2)) * 1e16
+
+    if st.button("🚀 Procesar Bloque Completo (24 Horas Consecutivas)", key="p5_btn_process"):
+        with st.spinner("Sincronizando claves multi-variable con el servidor del DLR..."):
+            headers = {"User-Agent": "Mozilla/5.0"}
+            
+            temp_real_3d = np.zeros((24, 43, 81))
+            temp_rms_3d = np.zeros((24, 43, 81))
+            temp_model_3d = np.zeros((24, 43, 81))
+            temp_etiquetas = []
+            exito_total_p5 = True
+
+            for h in range(24):
+                link_exitoso = False
+                minuto_exitoso = 0
+                data_instante = None
+                
+                # Bucle de contingencia temporal en pasos de 5 min
+                for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]:
+                    url_intento = generar_enlace_dlr_seguro(p5_fecha.year, p5_fecha.month, p5_fecha.day, h, m)
+                    try:
+                        response = requests.get(url_intento, headers=headers, timeout=4)
+                        if response.status_code == 200:
+                            data_instante = response.json()
+                            link_exitoso = True
+                            minuto_exitoso = m
+                            break
+                    except Exception: pass
+
+                if not link_exitoso:
+                    st.error(f"❌ Imposible consolidar la auditoría. Faltan datos a las {h:02d}:00 UTC.")
+                    exito_total_p5 = False
+                    break
+
+                real_list, rms_list, model_list = [], [], []
+                if 'data' in data_instante and 'grid' in data_instante['data'] and 'features' in data_instante['data']['grid']:
+                    for feature in data_instante['data']['grid']['features']:
+                        if 'properties' in feature:
+                            props = feature['properties']
+                            if 'vtec_assimilated_tecu' in props and 'vtec_rms_tecu' in props and 'vtec_model_tecu' in props:
+                                real_list.append(props['vtec_assimilated_tecu'])
+                                rms_list.append(props['vtec_rms_tecu'])
+                                model_list.append(props['vtec_model_tecu'])
+
+                if len(real_list) != 43 * 81:
+                    st.error(f"❌ Estructura de cuadrícula asimétrica o incompleta en la hora {h:02d}.")
+                    exito_total_p5 = False
+                    break
+
+                # Conversión y almacenamiento directo en metros reales
+                temp_real_3d[h, :, :] = np.array(real_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_rms_3d[h, :, :] = np.array(rms_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_model_3d[h, :, :] = np.array(model_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
+
+            if exito_total_p5:
+                st.session_state.p5_historial_real_3d = temp_real_3d
+                st.session_state.p5_historial_rms_3d = temp_rms_3d
+                st.session_state.p5_historial_model_3d = temp_model_3d
+                st.session_state.p5_historial_desviacion_3d = temp_model_3d - temp_real_3d
+                st.session_state.p5_etiquetas_fechas_reales = temp_etiquetas
+                st.session_state.p5_fecha_info = f"{p5_fecha.strftime('%d/%m/%Y')} - {p5_constelacion}"
+                st.success("📊 Repositorio multi-variable cargado correctamente en memoria.")
+
+    # MENÚ SECUNDARIO INTERNO PARA SEPARAR LOS PILARES SOLICITADOS
+    if st.session_state.p5_historial_real_3d is not None:
+        st.divider()
+        st.subheader("🎯 Panel de Control de Auditoría Avanzada")
+        
+        sub_seccion_p5 = st.radio(
+            "Selecciona el pilar de estudio científico:",
+            ["Pilar 1: Evolución de la Desviación del Modelo (Residuos Teóricos)", 
+             "Pilar 2: Incertidumbre del Dato (Margen de Confianza RMS)"],
+            horizontal=True, key="radio_sub_p5"
+        )
+        
+        # Sistema dual alternativo de entrada de localización común para la pestaña
+        st.markdown("#### 📍 Punto de Control e Intermediación")
+        p5_tipo_pos = st.radio("Método de entrada de localización para control:", ["Buscar por Nombre", "Introducir Coordenadas Manuales"], horizontal=True, key="p5_pos_radio")
+        
+        lat_v, lon_v, label_v = None, None, ""
+        if p5_tipo_pos == "Buscar por Nombre":
+            ciudad_p5_txt = st.text_input("Ingresa la ciudad o nodo a auditar:", "Madrid", key="p5_txt_loc")
+            if ciudad_p5_txt:
+                lat_v, lon_v, label_v = geocodificar_localidad(ciudad_p5_txt)
+        else:
+            col_lv1, col_lv2 = st.columns(2)
+            lat_v_man = col_lv1.number_input("Latitud Nodo exacto (°N):", min_value=float(LAT_MIN), max_value=float(LAT_MAX), value=40.41, step=0.01, key="num_lat_p5")
+            lon_v_man = col_lv2.number_input("Longitud Nodo exacto (°E):", min_value=float(LON_MIN), max_value=float(LON_MAX), value=-3.70, step=0.01, key="num_lon_p5")
+            lat_v, lon_v, label_v = lat_v_man, lon_v_man, "Coordenadas fijas"
+
+        # CÁLCULOS PUNTUALES EN METROS
+        if lat_v is not None and lon_v is not None:
+            if (LAT_MIN <= lat_v <= LAT_MAX) and (LON_MIN <= lon_v <= LON_MAX):
+                idx_lat = (np.abs(LATS_EUROPA - lat_v)).argmin()
+                idx_lon = (np.abs(LONS_EUROPA - lon_v)).argmin()
+                
+                val_real_p = st.session_state.p5_historial_real_3d[p5_hora_vista, idx_lat, idx_lon]
+                val_model_p = st.session_state.p5_historial_model_3d[p5_hora_vista, idx_lat, idx_lon]
+                val_dev_p = st.session_state.p5_historial_desviacion_3d[p5_hora_vista, idx_lat, idx_lon]
+                val_rms_p = st.session_state.p5_historial_rms_3d[p5_hora_vista, idx_lat, idx_lon]
+                
+                c_1, c_2, c_3 = st.columns(3)
+                if "Pilar 1" in sub_seccion_p5:
+                    c_1.metric(label="🛰️ Retraso Real", value=f"{val_real_p:.3f} m")
+                    c_2.metric(label="🔮 Retraso Teórico", value=f"{val_model_p:.3f} m")
+                    c_3.metric(label="📉 Desviación Residual", value=f"{val_dev_p:+.3f} m", delta=f"{val_dev_p:.3f} m", delta_color="inverse")
+                else:
+                    c_1.metric(label="🛡️ Incertidumbre de Confianza", value=f"± {val_rms_p:.3f} m")
+                    c_2.metric(label="📍 Ubicación de Control", value=label_v)
+                    c_3.info(f"**Coordenadas:**\nLat {lat_v:.2f}°N | Lon {lon_v:.2f}°E")
+            else: st.error("Fuera de la malla de Europa.")
+
+        st.divider()
+        p5_toggle_color = st.toggle("🔍 Optimizar rango cromático al Máx/Mín de este mapa específico", key="toggle_p5_scale")
+
+        # =====================================================================
+        # DESPLIEGUE DEL PILAR 1: EVOLUCIÓN DE LA DESVIACIÓN
+        # =====================================================================
+        if "Pilar 1" in sub_seccion_p5:
+            st.write(f"### 📉 Análisis de Residuos: Modelo Teórico menos Valor Real")
+            
+            # Configuración de límites fijos simétricos para la paleta divergente 'seismic'
+            if p5_toggle_color:
+                lim_abs = float(np.max(np.abs(st.session_state.p5_historial_desviacion_3d[p5_hora_vista])))
+                vmin_p5, vmax_p5 = -lim_abs, lim_abs
+                str_status = "Ajuste Simétrico Local"
+            else:
+                lim_abs_global = float(np.ceil(np.max(np.abs(st.session_state.p5_historial_desviacion_3d))))
+                vmin_p5, vmax_p5 = -lim_abs_global, lim_abs_global
+                str_status = "Rango Universal Centrado"
+
+            fig_p5_d = plt.figure(figsize=(11, 6), dpi=100)
+            ax_p5_d = plt.axes(projection=ccrs.PlateCarree())
+            ax_p5_d.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            ax_p5_d.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+            ax_p5_d.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+            ax_p5_d.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+            
+            grid_d = ax_p5_d.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+            grid_d.top_labels, grid_d.right_labels = False, False
+            grid_d.xformatter, grid_d.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+
+            # Renderizado del mapa de desviación con paleta sísmica (Blanco = 0 Error)
+            mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
+                                         transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+            plt.colorbar(mapa_d, ax=ax_p5_d, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
+            ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC\n[Blanco = Coincidencia | Rojo = Sobreestima | Azul = Subestima]", fontsize=10, weight='bold')
+            st.pyplot(fig_p5_d)
+            plt.close(fig_p5_d)
+
+            # Reproductor dinámico en la misma pestaña para ver los 24 frames del día
+            st.subheader("🎬 Reproductor Dinámico de la Desviación (24 Horas)")
+            if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
+                contenedor_p5_anim = st.empty()
+                for f in range(24):
+                    fig_a, ax_a = plt.subplots(figsize=(10, 5.5), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
+                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5)
+                    fig_a.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('DESVIACIÓN EN METROS', weight='bold')
+                    ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
+                    contenedor_p5_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(0.4)
+
+        # =====================================================================
+        # DESPLIEGUE DEL PILAR 2: INCERTIDUMBRE DEL DATO
+        # =====================================================================
+        else:
+            st.write(f"### 🛡️ Tolerancia Geodésica: Análisis de Confianza de Medida (RMS)")
+            
+            if p5_toggle_color:
+                vmin_rms, vmax_rms = float(np.min(st.session_state.p5_historial_rms_3d[p5_hora_vista])), float(np.max(st.session_state.p5_historial_rms_3d[p5_hora_vista]))
+                str_status_r = "Rango Optimizado Local"
+            else:
+                vmin_rms, vmax_rms = 0.0, float(np.ceil(np.max(st.session_state.p5_historial_rms_3d)))
+                str_status_r = "Escala Universal Fija"
+
+            fig_p5_r = plt.figure(figsize=(11, 6), dpi=100)
+            ax_p5_r = plt.axes(projection=ccrs.PlateCarree())
+            ax_p5_r.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            ax_p5_r.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
+            ax_p5_r.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+            ax_p5_r.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+            
+            grid_r = ax_p5_r.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+            grid_r.top_labels, grid_r.right_labels = False, False
+            grid_r.xformatter, grid_r.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+
+            # Renderizado del mapa de incertidumbre con la paleta secuencial cálida
+            mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
+                                         transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
+            plt.colorbar(mapa_r, ax=ax_p5_r, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
+            ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
+            st.pyplot(fig_p5_r)
+            plt.close(fig_p5_r)
+
 
 # =====================================================================
 # PESTAÑA 6: COMENTARIOS Y FEEDBACK
