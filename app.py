@@ -153,7 +153,7 @@ with tab1:
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
         
         # Sistema dual alternativo de entrada de localización
-        tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por Ciudad/Región", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
+        tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por localidad", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
         
         lat, lon, label_punto = None, None, ""
         
