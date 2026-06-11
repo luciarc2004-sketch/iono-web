@@ -262,7 +262,7 @@ with tab2:
         plt.close(fig_p)
 
 
-st.subheader("📍 Valor VTEC de un punto")
+        st.subheader("📍 Valor VTEC de un punto")
         
         # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 2)
         tipo_busqueda_t2 = st.radio("Método de entrada de localización histórica:", ["Buscar por Nombre", "Coordenadas directas (Lat/Lon)"], horizontal=True, key="radio_t2")
