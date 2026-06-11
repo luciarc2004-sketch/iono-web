@@ -147,7 +147,7 @@ with tab1:
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
 
-st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
+        st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
         
         # Sistema dual alternativo de entrada de localización
         tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por Ciudad/Región", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
