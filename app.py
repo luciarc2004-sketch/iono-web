@@ -1146,7 +1146,7 @@ with tab5:
             plt.close(fig_p5_r)
 
 # =====================================================================
-# PESTAÑA 6: COMENTARIOS Y FEEDBACK
+# PESTAÑA 6: COMENTARIOS Y FEEDBACK (TU BASE PERSONALIZADA CORREGIDA)
 # =====================================================================
 with tab6:
     st.title("💬 Buzón de Sugerencias y Feedback")
@@ -1175,8 +1175,8 @@ with tab6:
         if not comentario.strip():
             st.error("⚠️ Por favor, escribe un comentario antes de continuar.")
         else:
-            # Configuramos tus datos de recepción
-            TU_EMAIL = "luciarc2004@gmail.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
+            # Configuramos tus datos de recepción (Mantenemos tu correo real)
+            TU_EMAIL = "luciarc2004@gmail.com"  
             asunto_correo = f"[FEEDBACK PORTAL IONOSFERA] - {tipo_comentario}"
             
             # Formateamos el cuerpo del texto para el Mailto
@@ -1200,15 +1200,21 @@ with tab6:
             
             # Notificación y botón de acción para abrir el gestor de correo
             st.success("🎉 ¡Estructura de feedback generada con éxito!")
+            
+            # REPARADO: Cambiado 'unsafe_allow_value=True' por 'unsafe_allow_html=True'
             st.markdown(
                 f'<a href="{mailto_url}" target="_blank" style="text-decoration:none;">'
                 f'<div style="padding:12px; background-color:#ff3d00; color:white; text-align:center; '
-                f'border-radius:6px; font-weight:bold; font-size:16px;">'
+                f'border-radius:6px; font-weight:bold; font-size:16px; cursor:pointer;">'
                 f'🚀 Haz clic aquí para enviar el correo electrónico'
                 f'</div></a>', 
-                unsafe_allow_value=True
+                unsafe_allow_html=True
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
+
+
+
+
 
 
 
