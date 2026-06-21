@@ -291,7 +291,7 @@ with tab2:
             else: st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
 
 # =====================================================================
-# PESTAÑA 3: EVOLUCIÓN TECU (CÓDIGO ENTERO REESTRUCTURADO)
+# PESTAÑA 3: EVOLUCIÓN TECU (CÓDIGO ENTERO CORREGIDO Y MAQUETADO)
 # =====================================================================
 with tab3:
     st.title("📈  Evolución Temporal del TECU")
@@ -359,10 +359,13 @@ with tab3:
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6'); ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd'); ax_mx.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+            ax_mx.add_feature(cfeature.COASTLINE, edgecolor='#222222')
             mapa_maximos = ax_mx.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d)
             fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
-            st.pyplot(fig_max); plt.close(fig_max)
+            st.pyplot(fig_max)
+            plt.close(fig_max)
 
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas")
             tipo_busqueda_t3d = st.radio("Formato de inserción de localidad:", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3d")
@@ -382,10 +385,16 @@ with tab3:
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
                 for ciudad_obj in st.session_state.ciudades_lista:
-                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin(); idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
+                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin()
+                    idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
                     ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), st.session_state.historial_vtec_3d[:, idx_lat, idx_lon], marker='s', linewidth=2, label=ciudad_obj['name'])
-                ax_lineas.grid(True, linestyle='--'); ax_lineas.set_ylim(vmin_d, vmax_d); ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales))); ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25); ax_lineas.legend(loc="upper right")
-                st.pyplot(fig_lineas); plt.close(fig_lineas)
+                ax_lineas.grid(True, linestyle='--')
+                ax_lineas.set_ylim(vmin_d, vmax_d)
+                ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales)))
+                ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25)
+                ax_lineas.legend(loc="upper right")
+                st.pyplot(fig_lineas)
+                plt.close(fig_lineas)
 
     # =====================================================================
     # BLOQUE 2: POR HORAS (24H ÚNICO DÍA)
@@ -438,10 +447,12 @@ with tab3:
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6'); ax_mxh.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            ax_mxh.add_feature(cfeature.COASTLINE, edgecolor='#222222')
             mapa_maximos_h = ax_mxh.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.h_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h)
             fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
-            st.pyplot(fig_max_h); plt.close(fig_max_h)
+            st.pyplot(fig_max_h)
+            plt.close(fig_max_h)
 
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             tipo_busqueda_t3h = st.radio("Formato de inserción de localidad (24h):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3h")
@@ -461,10 +472,16 @@ with tab3:
             if st.session_state.h_ciudades_lista:
                 fig_lineas_h, ax_lineas_h = plt.subplots(figsize=(12, 5))
                 for ciudad_obj in st.session_state.h_ciudades_lista:
-                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin(); idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
+                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin()
+                    idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
                     ax_lineas_h.plot(range(24), st.session_state.h_historial_vtec_3d[:, idx_lat, idx_lon], marker='o', linewidth=2, label=ciudad_obj['name'])
-                ax_lineas_h.grid(True, linestyle='--'); ax_lineas_h.set_ylim(vmin_h, vmax_h); ax_lineas_h.set_xticks(range(24)); ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45); ax_lineas_h.legend(loc="upper right")
-                st.pyplot(fig_lineas_h); plt.close(fig_lineas_h)
+                ax_lineas_h.grid(True, linestyle='--')
+                ax_lineas_h.set_ylim(vmin_h, vmax_h)
+                ax_lineas_h.set_xticks(range(24))
+                ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45)
+                ax_lineas_h.legend(loc="upper right")
+                st.pyplot(fig_lineas_h)
+                plt.close(fig_lineas_h)
 
     # =====================================================================
     # BLOQUE 3: DÍAS COMPLETOS (RANGO CONTINUO HORARIO ENCADENADO)
@@ -539,28 +556,35 @@ with tab3:
             
             mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
             fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
-            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
+            st.pyplot(fig_max_dc)
+            plt.close(fig_max_dc)
 
-            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (FLAMES MAPS)
+            # 2. REPRODUCTOR DINÁMICO
             st.subheader("🎬 Reproductor Dinámico de la Evolución Continuada")
             if st.button("▶️ Reproducir Serie Completa Frame por Frame", key="btn_play_dc_frames"):
                 contenedor_dc_anim = st.empty()
+                
                 for f in range(len(st.session_state.dc_etiquetas_reales)):
-                    fig_a = plt.figure(figsize=(11, 6), dpi=100)
-                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    fig_a = plt.figure(figsize=(10, 6), dpi=100)
+                    ax_a = fig_a.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
                     ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    
                     ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
                     ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
                     ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
                     
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_historial_vtec_3d[f, :, :], 
-                                              transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
+                    
+                    cbar = fig_a.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7)
+                    cbar.set_label('VTEC (TECU)', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO CONTINUO: {st.session_state.dc_etiquetas_reales[f]} UTC", fontsize=10, weight='bold')
                     
                     contenedor_dc_anim.pyplot(fig_a)
-                    plt.close(fig_a)
-                    time.sleep(0.25)
+                    plt.close(fig_a)  # Limpieza absoluta de memoria RAM por frame
+                    time.sleep(0.15)
+                
+                st.success("🏁 Reproducción de la serie completada.")
 
             # 3. GRÁFICA DE LOCALIZACIÓN CONTINUA (CIUDAD / COORDENADAS)
             st.subheader("📊 Gráfica Continua del Ciclo de Días Completos Encadenados")
@@ -593,7 +617,8 @@ with tab3:
                 ax_lineas_dc.set_ylabel("TECU", weight='bold')
                 ax_lineas_dc.set_xticklabels([st.session_state.dc_etiquetas_reales[k] if k % 6 == 0 else "" for k in range(len(st.session_state.dc_etiquetas_reales))], rotation=45, fontsize=8)
                 ax_lineas_dc.legend(loc="upper right")
-                st.pyplot(fig_lineas_dc); plt.close(fig_lineas_dc)
+                st.pyplot(fig_lineas_dc)
+                plt.close(fig_lineas_dc)
 # =====================================================================
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
