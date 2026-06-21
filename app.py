@@ -29,12 +29,12 @@ LONS_EUROPA = np.arange(LON_MIN, LON_MAX + DELTA_LON, DELTA_LON)
 GRID_LON_EUR, GRID_LAT_GRID = np.meshgrid(LONS_EUROPA, LATS_EUROPA)
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🌍 Inicio y Monitoreo Real", 
+    "🌍 Inicio", 
     "📊 Análisis en el pasado", 
     "📈 Evolución TECU", 
-    "🔮 Pronóstico", 
+    " Pronóstico", 
     "📉 Desviaciones del Modelo",
-    "💬 Comentarios y Feedback"
+    "💬 Comentarios "
 ])
 
 def geocodificar_localidad(nombre_lugar):
@@ -82,7 +82,7 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (ACTUALIZADA)
 # =====================================================================
 with tab1:
-    st.title("🛰️ Sistema Unificado de Monitoreo Ionosférico (TEC/TECU)")
+    st.title("🛰️ Sistema en Tiempo Real de Monitoreo Ionosférico (TEC/TECU)")
     st.markdown("### ¿Cómo afectan el TEC y el TECU a las señales GNSS?")
     st.markdown("El **Contenido Total de Electrones (TEC)** es la cantidad integrada de electrones atrapados en la ionosfera a lo largo de la trayectoria de una señal de satélite. Se mide en unidades **TECU** ($1\\text{ TECU} = 10^{16}$ electrones por metro cuadrado).")
     st.divider()
@@ -110,40 +110,8 @@ with tab1:
         interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
         interp_global = RegularGridInterpolator((lats_glb, lats_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
-        st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas (Tiempo Real)")
-        
-        # Sistema dual alternativo de entrada de localización
-        tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por Ciudad/Región", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
-        
-        lat, lon, label_punto = None, None, ""
-        
-        if tipo_busqueda_t1 == "Buscar por Ciudad/Región":
-            localidad_usuario = st.text_input("Escribe el nombre de una ciudad o región:", "Madrid", key="txt_t1")
-            if localidad_usuario:
-                lat, lon, label_punto = geocodificar_localidad(localidad_usuario)
-        else:
-            col_l1, col_l2 = st.columns(2)
-            lat_manual = col_l1.number_input("Latitud (°N):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_t1")
-            lon_manual = col_l2.number_input("Longitud (°E):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_t1")
-            lat, lon, label_punto = lat_manual, lon_manual, f"Coordenadas Puras"
 
-        # Procesamiento dinámico del píxel consultado
-        if lat is not None and lon is not None:
-            dentro_europa = (LAT_MIN <= lat <= LAT_MAX) and (LON_MIN <= lon <= LON_MAX)
-            punto_consulta = np.array([[lat, lon]])
-            valor_tecu = float(interp_europa(punto_consulta)[0]) if dentro_europa else float(interp_global(punto_consulta)[0])
-            fuente = "Malla Regional Europa" if dentro_europa else "Malla Planetaria Global"
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric(label="📍 Punto de Entrada", value=label_punto)
-            col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
-            col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
-        else:
-            if tipo_busqueda_t1 == "Buscar por Ciudad/Región": st.error("No se pudo mapear la ciudad.")
-
-        st.divider()
-        
-        # Interruptor de control para el ajuste de escala local solicitado
+     # Interruptor de control para el ajuste de escala local solicitado
         ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
         
         if ajuste_local_t1:
@@ -176,14 +144,51 @@ with tab1:
         
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
-        
+
+
         st.pyplot(fig)
+        st.divider()
+        
+   
+        st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
+        
+        # Sistema dual alternativo de entrada de localización
+        tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por localidad", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
+        
+        lat, lon, label_punto = None, None, ""
+        
+        if tipo_busqueda_t1 == "Buscar por localidad":
+            localidad_usuario = st.text_input("Escribe el nombre de una ciudad o región:", "Toledo", key="txt_t1")
+            if localidad_usuario:
+                lat, lon, label_punto = geocodificar_localidad(localidad_usuario)
+        else:
+            col_l1, col_l2 = st.columns(2)
+            lat_manual = col_l1.number_input("Latitud (°N):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_t1")
+            lon_manual = col_l2.number_input("Longitud (°E):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_t1")
+            lat, lon, label_punto = lat_manual, lon_manual, f"Coordenadas Puras"
+
+        # Procesamiento dinámico del píxel consultado
+        if lat is not None and lon is not None:
+            dentro_europa = (LAT_MIN <= lat <= LAT_MAX) and (LON_MIN <= lon <= LON_MAX)
+            punto_consulta = np.array([[lat, lon]])
+            valor_tecu = float(interp_europa(punto_consulta)[0]) if dentro_europa else float(interp_global(punto_consulta)[0])
+            fuente = "Malla Regional Europa" if dentro_europa else "Malla Planetaria Global"
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric(label="📍 Punto de Entrada", value=label_punto)
+            col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
+            col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
+        else:
+            if tipo_busqueda_t1 == "Buscar por Ciudad/Región": st.error("No se pudo mapear la ciudad.")
+
+        
+    
 
         # -----------------------------------------------------------------
-        # SECCIÓN NUEVA: ENLACES DE INTERÉS Y RECURSOS CIENTÍFICOS
+        #  ENLACES DE INTERÉS Y RECURSOS 
         # -----------------------------------------------------------------
         st.divider()
-        st.subheader("🔗 Enlaces de Interés y Recursos Científicos")
+        st.subheader("🔗 Enlaces de Interés y Recursos")
         
         col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
         
@@ -200,7 +205,7 @@ with tab1:
         with col_lnk3:
             st.markdown("#### 🛠️ Herramientas Complementarias")
             st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
-            st.markdown("- [RTKLIB](http://www.rtklib.com/) - Software de código abierto para posicionamiento GNSS.")
+            st.markdown("- [Códigos Web](https://github.com/luciarc2004-sketch) - Código público.")
 
     except Exception as e: st.error(f"Error en Tiempo Real: {e}")
 
@@ -222,7 +227,7 @@ with tab2:
     minuto_ajustado = (minuto_sel // 15) * 15
     url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    if st.button("🚀 Cargar Mapa Histórico"):
+    if st.button("🚀 Cargar Mapa"):
         with st.spinner("Sincronizando Malla Geomagnética Histórica con el DLR..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             try:
@@ -236,7 +241,31 @@ with tab2:
 
     if st.session_state.matriz_pasado is not None:
         st.divider()
-        st.subheader("📍 Interpolar Píxel Histórico Específico")
+        
+
+        ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa pasado", key="toggle_t2")
+        
+        if ajuste_local_t2:
+            vmin_p, vmax_p = float(np.min(st.session_state.matriz_pasado)), float(np.max(st.session_state.matriz_pasado))
+            lbl_status_p = "Rango de Color Adaptado Localmente"
+        else:
+            vmin_p, vmax_p = VMIN_TECU_FIJO, VMAX_TECU_FIJO
+            lbl_status_p = "Escala Fija Universal (0-55 TECU)"
+
+        fig_p = plt.figure(figsize=(11, 6), dpi=100)
+        ax_p = plt.axes(projection=ccrs.PlateCarree())
+        ax_p.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+        
+        mapa_p = ax_p.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_p, vmax=vmax_p)
+        plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'VTEC ASSIMILATED (TECU) [{lbl_status_p}]', weight='bold')
+        st.pyplot(fig_p)
+        plt.close(fig_p)
+
+        st.divider()
+        st.subheader("📍 Valor VTEC de un punto")
         
         # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 2)
         tipo_busqueda_t2 = st.radio("Método de entrada de localización histórica:", ["Buscar por Nombre", "Coordenadas directas (Lat/Lon)"], horizontal=True, key="radio_t2")
@@ -261,32 +290,11 @@ with tab2:
                 st.caption(f"Coordenadas evaluadas: {lat_p:.3f}°N, {lon_p:.3f}°E")
             else: st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
 
-        st.divider()
-        ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa pasado", key="toggle_t2")
-        
-        if ajuste_local_t2:
-            vmin_p, vmax_p = float(np.min(st.session_state.matriz_pasado)), float(np.max(st.session_state.matriz_pasado))
-            lbl_status_p = "Rango de Color Adaptado Localmente"
-        else:
-            vmin_p, vmax_p = VMIN_TECU_FIJO, VMAX_TECU_FIJO
-            lbl_status_p = "Escala Fija Universal (0-55 TECU)"
-
-        fig_p = plt.figure(figsize=(11, 6), dpi=100)
-        ax_p = plt.axes(projection=ccrs.PlateCarree())
-        ax_p.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-        ax_p.add_feature(cfeature.LAND, facecolor='#f5f5f5')
-        ax_p.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-        ax_p.add_feature(cfeature.COASTLINE, edgecolor='#222222')
-        
-        mapa_p = ax_p.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.matriz_pasado, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_p, vmax=vmax_p)
-        plt.colorbar(mapa_p, ax=ax_p, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'VTEC ASSIMILATED (TECU) [{lbl_status_p}]', weight='bold')
-        st.pyplot(fig_p)
-        plt.close(fig_p)
 # =====================================================================
 # PESTAÑA 3: EVOLUCIÓN TECU (CÓDIGO ENTERO REESTRUCTURADO)
 # =====================================================================
 with tab3:
-    st.title("📈 Estudio de Evolución Temporal del TECU")
+    st.title("📈  Evolución Temporal del TECU")
     
     # Selector unificado en la cabecera con las tres opciones oficiales
     modo_evolucion = st.radio(
@@ -300,7 +308,7 @@ with tab3:
     # BLOQUE 1: POR DÍAS (HORA FIJA)
     # =====================================================================
     if modo_evolucion == "Por Días (Hora Fija)":
-        st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
+        st.subheader("Fija tu rango temporal a estudiar")
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
             st.session_state.matriz_maximos, st.session_state.ciudades_lista = None, []
@@ -590,7 +598,7 @@ with tab3:
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
 with tab4:
-    st.title("🔮 Predicción Científica del VTEC Ionosférico")
+    st.title("Predicción del VTEC Ionosférico")
     st.markdown("### Motor Predictivo Localizado (Climatología + Persistencia Amortiguada)")
     st.divider()
 
@@ -899,10 +907,10 @@ with tab4:
             for idx, f_fut in enumerate(st.session_state.p4_fechas_futuro):
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
 # =====================================================================
-# PESTAÑA 5: DESVIACIONES DEL MODELO (REESTRUCTURACIÓN PILARES 1 Y 2)
+# PESTAÑA 5: DESVIACIONES DEL MODELO 
 # =====================================================================
 with tab5:
-    st.title("📉 Informe Analítico de Desviaciones e Incertidumbre")
+    st.title("📉 Desviaciones e Incertidumbre")
     st.divider()
 
     # Variables de estado de sesión persistentes para evitar descargas duplicadas
@@ -923,7 +931,7 @@ with tab5:
     }
 
     # CONTROLES PRINCIPALES DE DESCARGA
-    st.subheader("📥 Extracción y Configuración de Datos Diarios")
+    st.subheader("📥 Extracción y Configuración de Datos")
     col_v1, col_v2, col_v3 = st.columns(3)
     p5_fecha = col_v1.date_input("Selecciona la Fecha a Auditar:", datetime.date(2026, 1, 24), key="p5_date_calendar")
     p5_constelacion = col_v2.selectbox("📡 Señal GNSS de Referencia:", list(FRECUENCIAS_GNSS_P5.keys()), key="p5_select_freq")
@@ -1138,7 +1146,7 @@ with tab5:
             plt.close(fig_p5_r)
 
 # =====================================================================
-# PESTAÑA 6: COMENTARIOS Y FEEDBACK
+# PESTAÑA 6: COMENTARIOS Y FEEDBACK (TU BASE PERSONALIZADA CORREGIDA)
 # =====================================================================
 with tab6:
     st.title("💬 Buzón de Sugerencias y Feedback")
@@ -1150,7 +1158,7 @@ with tab6:
 
     # Formulario estético de recogida de información
     with st.form("formulario_feedback", clear_on_submit=False):
-        nombre = st.text_input("👤 Tu Nombre / Institución:", placeholder="Ej. Laboratorio de Geomagnetismo UCLM")
+        nombre = st.text_input("👤 Tu Nombre / Institución:", placeholder="Ej. Laboratorio INAIA UCLM")
         email_usuario = st.text_input("📧 Correo electrónico de contacto:", placeholder="ejemplo@correo.com")
         
         tipo_comentario = st.selectbox(
@@ -1167,8 +1175,8 @@ with tab6:
         if not comentario.strip():
             st.error("⚠️ Por favor, escribe un comentario antes de continuar.")
         else:
-            # Configuramos tus datos de recepción
-            TU_EMAIL = "luciarc2004@gmail.com"  # <--- CAMBIA ESTO POR TU EMAIL REAL
+            # Configuramos tus datos de recepción (Mantenemos tu correo real)
+            TU_EMAIL = "luciarc2004@gmail.com"  
             asunto_correo = f"[FEEDBACK PORTAL IONOSFERA] - {tipo_comentario}"
             
             # Formateamos el cuerpo del texto para el Mailto
@@ -1192,14 +1200,20 @@ with tab6:
             
             # Notificación y botón de acción para abrir el gestor de correo
             st.success("🎉 ¡Estructura de feedback generada con éxito!")
+            
+            # REPARADO: Cambiado 'unsafe_allow_value=True' por 'unsafe_allow_html=True'
             st.markdown(
                 f'<a href="{mailto_url}" target="_blank" style="text-decoration:none;">'
                 f'<div style="padding:12px; background-color:#ff3d00; color:white; text-align:center; '
-                f'border-radius:6px; font-weight:bold; font-size:16px;">'
+                f'border-radius:6px; font-weight:bold; font-size:16px; cursor:pointer;">'
                 f'🚀 Haz clic aquí para enviar el correo electrónico'
                 f'</div></a>', 
-                unsafe_allow_value=True
+                unsafe_allow_html=True
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
+
+
+
+
 
 
