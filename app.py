@@ -106,6 +106,8 @@ with tab1:
 
     # MOTOR DE CARGA DE ALTA VELOCIDAD: Filtra en memoria y prepara vectores masivos
     @st.cache_data
+ # MOTOR DE CARGA CORREGIDO PARA LA ESTRUCTURA REAL DE TU JSON
+    @st.cache_data
     def cargar_aeropuertos_optimizado():
         try:
             with open("aeropuertos_registrados.json", "r", encoding="utf-8") as f:
@@ -114,10 +116,18 @@ with tab1:
             aeropuertos_europa = []
             lats_globales = []
             lons_globales = []
+            diccionario_por_oaci = {} # Aquí indexaremos por OACI real
             
+            # Recorremos la estructura secuencial ("0", "1", "2"...)
             for aero in datos_dict.values():
                 lat_a = aero.get("lat")
                 lon_a = aero.get("lon")
+                
+                # Extraemos el código OACI/ICAO y lo guardamos indexado
+                codigo_icao = aero.get("icao")
+                if codigo_icao:
+                    diccionario_por_oaci[str(codigo_icao).strip().upper()] = aero
+                
                 if lat_a is not None and lon_a is not None:
                     lats_globales.append(lat_a)
                     lons_globales.append(lon_a)
@@ -125,8 +135,10 @@ with tab1:
                     if (LAT_MIN <= lat_a <= LAT_MAX) and (LON_MIN <= lon_a <= LON_MAX):
                         aeropuertos_europa.append(aero)
                         
-            return aeropuertos_europa, lons_globales, lats_globales, datos_dict
-        except Exception:
+            return aeropuertos_europa, lons_globales, lats_globales, diccionario_por_oaci
+        except Exception as e:
+            # Si hay un error de carga, lo capturamos para que no caiga la app
+            st.error(f"Error crítico leyendo el JSON de aeropuertos: {e}")
             return [], [], [], {}
 
     try:
