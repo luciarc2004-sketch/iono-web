@@ -80,8 +80,11 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     str_hora = fecha_fin.strftime("%H")
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
     return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
+
+
+
 # =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (VERSIÓN AERONÁUTICA PRO)
+# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (CON ESTACIONES GNSS SELECCIONABLES)
 # =====================================================================
 with tab1:
     st.title("🛰️ Sistema en Tiempo Real de Monitoreo Ionosférico (TEC/TECU)")
@@ -104,46 +107,33 @@ with tab1:
         matriz_vtec_glb = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_glb.json()['data']['grid']['features']]).reshape(73, 73)
         return matriz_vtec_eur, matriz_vtec_glb
 
-    # MOTOR DE CARGA DE ALTA VELOCIDAD: Filtra en memoria y prepara vectores masivos
+    # Carga estática de la base de datos de estaciones de control GNSS
     @st.cache_data
- # MOTOR DE CARGA CORREGIDO PARA LA ESTRUCTURA REAL DE TU JSON
-    @st.cache_data
-    def cargar_aeropuertos_optimizado():
-        try:
-            with open("aeropuertos_registrados.json", "r", encoding="utf-8") as f:
-                datos_dict = json.load(f)
+    def obtener_dataframe_estaciones():
+        coordenadas_estaciones = {
+            # Red Europa (EUREF)
+            "ACOR": {"lat": 43.364, "lon": -8.423, "red": "Europa (EUREF)"},
+            "BCLN": {"lat": 41.388, "lon": 2.112, "red": "Europa (EUREF)"},
+            "BRUX": {"lat": 50.798, "lon": 4.359, "red": "Europa (EUREF)"},
+            "DRES": {"lat": 51.029, "lon": 13.729, "red": "Europa (EUREF)"},
+            "REYK": {"lat": 64.139, "lon": -21.955, "red": "Europa (EUREF)"},
+            "OSLS": {"lat": 59.907, "lon": 10.720, "red": "Europa (EUREF)"},
+            "MATE": {"lat": 40.649, "lon": 16.704, "red": "Europa (EUREF)"},
             
-            aeropuertos_europa = []
-            lats_globales = []
-            lons_globales = []
-            diccionario_por_oaci = {} # Aquí indexaremos por OACI real
-            
-            # Recorremos la estructura secuencial ("0", "1", "2"...)
-            for aero in datos_dict.values():
-                lat_a = aero.get("lat")
-                lon_a = aero.get("lon")
-                
-                # Extraemos el código OACI/ICAO y lo guardamos indexado
-                codigo_icao = aero.get("icao")
-                if codigo_icao:
-                    diccionario_por_oaci[str(codigo_icao).strip().upper()] = aero
-                
-                if lat_a is not None and lon_a is not None:
-                    lats_globales.append(lat_a)
-                    lons_globales.append(lon_a)
-                    
-                    if (LAT_MIN <= lat_a <= LAT_MAX) and (LON_MIN <= lon_a <= LON_MAX):
-                        aeropuertos_europa.append(aero)
-                        
-            return aeropuertos_europa, lons_globales, lats_globales, diccionario_por_oaci
-        except Exception as e:
-            # Si hay un error de carga, lo capturamos para que no caiga la app
-            st.error(f"Error crítico leyendo el JSON de aeropuertos: {e}")
-            return [], [], [], {}
+            # Red Global (IGS)
+            "KJFK": {"lat": 40.641, "lon": -73.778, "red": "Global (IGS)"},
+            "ADIS": {"lat": 9.035, "lon": 38.765, "red": "Global (IGS)"},
+            "BRAZ": {"lat": -15.947, "lon": -47.878, "red": "Global (IGS)"},
+            "AUCK": {"lat": -36.602, "lon": 174.834, "red": "Global (IGS)"},
+            "KIR8": {"lat": 67.877, "lon": 21.064, "red": "Global (IGS)"},
+            "WUH2": {"lat": 30.531, "lon": 114.357, "red": "Global (IGS)"},
+            "SUT1": {"lat": -33.941, "lon": 18.474, "red": "Global (IGS)"}
+        }
+        return pd.DataFrame.from_dict(coordenadas_estaciones, orient='index')
 
     try:
         matriz_vtec_eur, matriz_vtec_glb = cargar_datos_vtec()
-        lista_aero_eur, lons_glb_aero, lats_glb_aero, diccionario_completo_aero = cargar_aeropuertos_optimizado()
+        df_estaciones = obtener_dataframe_estaciones()
         
         lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
         
@@ -151,8 +141,12 @@ with tab1:
         interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
         interp_global = RegularGridInterpolator((lats_glb, lons_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
-        # Interruptor de control para el ajuste de escala local
-        ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
+        # Panel de controladores de visualización superior
+        col_ctrl1, col_ctrl2 = st.columns(2)
+        with col_ctrl1:
+            ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
+        with col_ctrl2:
+            mostrar_estaciones = st.checkbox("📡 Superponer Estaciones GNSS de Referencia (EUREF / IGS)", value=False, key="chk_estaciones_t1")
         
         if ajuste_local_t1:
             vmin_eur, vmax_eur = float(np.min(matriz_vtec_eur)), float(np.max(matriz_vtec_eur))
@@ -163,35 +157,49 @@ with tab1:
             vmin_glb, vmax_glb = VMIN_TECU_FIJO, VMAX_TECU_FIJO
             lbl_status = "Escala Fija Universal (0-55 TECU)"
 
-        # -----------------------------------------------------------------
-        # 1. MAPAS PUROS DE IONOSFERA (MAPAS DEL PUNTO)
-        # -----------------------------------------------------------------
-        fig_tecu, (ax_t1, ax_t2) = plt.subplots(1, 2, figsize=(18, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+        # Construcción y renderizado de la figura dual
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         
-        # Mapa Regional Europa TECU
-        ax_t1.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-        ax_t1.add_feature(cfeature.LAND, facecolor='#f5f5f5')
-        ax_t1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-        ax_t1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
-        map_eur = ax_t1.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_eur, vmax=vmax_eur)
-        fig_tecu.colorbar(map_eur, ax=ax_t1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC REGIONAL (TECU) [{lbl_status}]', weight='bold')
+        # Sub-mapa 1: Malla Regional Europa
+        ax1.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+        ax1.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax1.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
+        
+        map_eur = ax1.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_eur, vmax=vmax_eur)
+        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC MALLA REGIONAL (TECU) [{lbl_status}]', weight='bold')
 
-        # Mapa Global TECU
-        ax_t2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-        ax_t2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
-        ax_t2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-        ax_t2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0)
+        # [LÓGICA SELECTIVA] Capa de Estaciones sobre el mapa de Europa
+        if mostrar_estaciones:
+            for idx, row in df_estaciones.iterrows():
+                # Solo pintamos si caen dentro del encuadre geográfico configurado para Europa
+                if (LON_MIN <= row['lon'] <= LON_MAX) and (LAT_MIN <= row['lat'] <= LAT_MAX):
+                    color_nodo = 'blue' if row['red'] == 'Europa (EUREF)' else 'red'
+                    ax1.scatter(row['lon'], row['lat'], color=color_nodo, s=45, edgecolor='black', linewidth=0.7, transform=ccrs.PlateCarree(), zorder=5)
+                    ax1.text(row['lon'] + 0.6, row['lat'] + 0.6, idx, fontsize=8, weight='bold', color='#1a1a1a', transform=ccrs.PlateCarree(), zorder=6)
+
+        # Sub-mapa 2: Malla Planetaria Global
+        ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+        ax2.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+        ax2.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+        ax2.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.0)
         grid_lon_glb, grid_lat_glb = np.meshgrid(lons_glb, lats_glb)
-        map_glb = ax_t2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
-        fig_tecu.colorbar(map_glb, ax=ax_t2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
+        
+        map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
+        fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
 
-        st.pyplot(fig_tecu)
-        plt.close(fig_tecu)
+        # [LÓGICA SELECTIVA] Capa de Estaciones sobre el mapa Global
+        if mostrar_estaciones:
+            for idx, row in df_estaciones.iterrows():
+                color_nodo = 'blue' if row['red'] == 'Europa (EUREF)' else 'red'
+                ax2.scatter(row['lon'], row['lat'], color=color_nodo, s=40, edgecolor='black', linewidth=0.6, transform=ccrs.PlateCarree(), zorder=5)
+                ax2.text(row['lon'] + 2.5, row['lat'] + 2.5, idx, fontsize=7, weight='bold', color='#1a1a1a', transform=ccrs.PlateCarree(), zorder=6)
+
+        st.pyplot(fig)
+        plt.close(fig)
         st.divider()
         
-        # -----------------------------------------------------------------
-        # 2. SISTEMA DE CONSULTA POR COORDENADAS O LOCALIDAD GENERAL
-        # -----------------------------------------------------------------
+        # Sistema de consultas numéricas por localidad/coordenadas
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
         tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por localidad", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
         
@@ -217,10 +225,8 @@ with tab1:
             col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
             col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
 
-       
-
         # -----------------------------------------------------------------
-        # 5. ENLACES DE INTERÉS Y RECURSOS (AL FINAL ABSOLUTO)
+        # ENLACES DE INTERÉS Y RECURSOS 
         # -----------------------------------------------------------------
         st.divider()
         st.subheader("🔗 Enlaces de Interés y Recursos")
@@ -243,6 +249,8 @@ with tab1:
 
     except Exception as e: 
         st.error(f"Error en Tiempo Real: {e}")
+
+
 # =====================================================================
 # PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
