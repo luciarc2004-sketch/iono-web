@@ -28,12 +28,14 @@ LATS_EUROPA = np.arange(LAT_MIN, LAT_MAX + DELTA_LAT, DELTA_LAT)
 LONS_EUROPA = np.arange(LON_MIN, LON_MAX + DELTA_LON, DELTA_LON)
 GRID_LON_EUR, GRID_LAT_GRID = np.meshgrid(LONS_EUROPA, LATS_EUROPA)
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+# SE AÑADE LA PESTAÑA EXTRA 'AVIACIÓN' EN LA PENÚLTIMA POSICIÓN
+tab1, tab2, tab3, tab4, tab5, tab_aviacion, tab6 = st.tabs([
     "🌍 Inicio", 
     "📊 Análisis en el pasado", 
     "📈 Evolución TECU", 
-    " Pronóstico", 
+    "🔮 Pronóstico", 
     "📉 Desviaciones del Modelo",
+    "🛩️ Aviación",
     "💬 Comentarios "
 ])
 
@@ -77,7 +79,6 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     str_hora = fecha_fin.strftime("%H")
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
     return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
-
 # =====================================================================
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (ACTUALIZADA)
 # =====================================================================
