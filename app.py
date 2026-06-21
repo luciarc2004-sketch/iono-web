@@ -303,20 +303,14 @@ with tab3:
         horizontal=True, 
         key="radio_modo_evolucion_global"
     )
-
-    # =====================================================================
-    # BLOQUE 1: POR DÍAS (HORA FIJA - REPRODUCTOR MULTIMEDIA REAL)
+# =====================================================================
+    # BLOQUE 1: POR DÍAS (HORA FIJA - REPRODUCTOR AUTOMÁTICO REGULABLE)
     # =====================================================================
     if modo_evolucion == "Por Días (Hora Fija)":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
             st.session_state.matriz_maximos, st.session_state.ciudades_lista = None, []
-        
-        if 'd_frame_actual' not in st.session_state:
-            st.session_state.d_frame_actual = 0
-        if 'd_reproduciendo' not in st.session_state:
-            st.session_state.d_reproduciendo = False
 
         col_c1, col_c2, col_c3 = st.columns(3)
         fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
@@ -355,64 +349,46 @@ with tab3:
                     st.session_state.historial_vtec_3d = temp_3d
                     st.session_state.etiquetas_fechas_reales = temp_etiquetas
                     st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                    st.session_state.d_frame_actual = 0
                     st.success("📊 Rango temporal pasado procesado.")
 
         if st.session_state.historial_vtec_3d is not None:
             ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
             vmin_d, vmax_d = (max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.historial_vtec_3d) + 2))) if ajuste_local_t3_dias else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
-            # 🎬 REPRODUCTOR DINÁMICO INTERACTIVO
-            st.subheader("🎬 Consola de Reproducción Dinámica (Por Días)")
-            max_d_frames = len(st.session_state.etiquetas_fechas_reales)
+            # --- REPRODUCTOR ÚNICO REGULABLE ---
+            st.subheader("🎬 Reproductor de Evolución Diaria")
             
-            d_slider = st.slider("🎞️ Línea de Tiempo:", min_value=0, max_value=max_d_frames - 1, value=st.session_state.d_frame_actual, key="slider_tiempo_dias")
-            st.session_state.d_frame_actual = d_slider
+            velocidad_frames_d = st.slider(
+                "⚡ Rapidez del paso de frames (segundos por mapa):", 
+                min_value=0.1, 
+                max_value=1.5, 
+                value=0.5, 
+                step=0.1,
+                key="slider_velocidad_d"
+            )
 
-            c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4, c_ctrl5, c_ctrl6 = st.columns(6)
-            with c_ctrl1:
-                if st.button("⏮️ Inicio", use_container_width=True, key="btn_d_inicio"):
-                    st.session_state.d_frame_actual = 0; st.session_state.d_reproduciendo = False; st.rerun()
-            with c_ctrl2:
-                if st.button("◀️ Atrás", use_container_width=True, key="btn_d_atras"):
-                    st.session_state.d_frame_actual = max(0, st.session_state.d_frame_actual - 1); st.session_state.d_reproduciendo = False; st.rerun()
-            with c_ctrl3:
-                if st.button("⏸️ Pausa", use_container_width=True, key="btn_d_pausa"):
-                    st.session_state.d_reproduciendo = False
-            with c_ctrl4:
-                if st.button("▶️ Play", use_container_width=True, key="btn_d_play"):
-                    st.session_state.d_reproduciendo = True
-            with c_ctrl5:
-                if st.button("▶️ Avance", use_container_width=True, key="btn_d_adelante"):
-                    st.session_state.d_frame_actual = min(max_d_frames - 1, st.session_state.d_frame_actual + 1); st.session_state.d_reproduciendo = False; st.rerun()
-            with c_ctrl6:
-                if st.button("⏭️ Final", use_container_width=True, key="btn_d_final"):
-                    st.session_state.d_frame_actual = max_d_frames - 1; st.session_state.d_reproduciendo = False; st.rerun()
+            if st.button("▶️ Iniciar Animación Automática", key="btn_play_dias_simple"):
+                contenedor_dias_anim = st.empty()
+                for f in range(len(st.session_state.etiquetas_fechas_reales)):
+                    fig_a = plt.figure(figsize=(10, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.historial_vtec_3d[f, :, :], 
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    ax_a.set_title(f"FRAME DIARIO: {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
+                    contenedor_dias_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(velocidad_frames_d)
+                
+                st.success("🏁 Reproducción completada.")
 
-            contenedor_d_mapa = st.empty()
-
-            def dibujar_frame_d(idx):
-                fig = plt.figure(figsize=(10, 6), dpi=100)
-                ax = plt.axes(projection=ccrs.PlateCarree())
-                ax.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                ax.add_feature(cfeature.LAND, facecolor='#f6f6f6'); ax.add_feature(cfeature.OCEAN, facecolor='#e3f2fd'); ax.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
-                mapa = ax.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.historial_vtec_3d[idx], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d)
-                plt.colorbar(mapa, ax=ax, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
-                ax.set_title(f"FRAME DIARIO: [{idx + 1}/{max_d_frames}] | {st.session_state.etiquetas_fechas_reales[idx]} UTC", fontsize=10, weight='bold')
-                return fig
-
-            if st.session_state.d_reproduciendo:
-                while st.session_state.d_frame_actual < max_d_frames:
-                    fig_run = dibujar_frame_d(st.session_state.d_frame_actual)
-                    contenedor_d_mapa.pyplot(fig_run); plt.close(fig_run)
-                    time.sleep(0.50)
-                    st.session_state.d_frame_actual += 1
-                st.session_state.d_reproduciendo = False; st.session_state.d_frame_actual = max_d_frames - 1; st.rerun()
-            else:
-                fig_static = dibujar_frame_d(st.session_state.d_frame_actual)
-                contenedor_d_mapa.pyplot(fig_static); plt.close(fig_static)
-
-            # 📌 MAPA DE MÁXIMOS ABSOLUTOS
+            # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
@@ -421,7 +397,7 @@ with tab3:
             fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             st.pyplot(fig_max); plt.close(fig_max)
 
-            # 📊 GRÁFICAS POR CIUDAD
+            # --- GRÁFICAS POR CIUDAD ---
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas")
             tipo_busqueda_t3d = st.radio("Formato de inserción de localidad:", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3d")
             lat_c, lon_c, name_c = None, None, ""
@@ -444,20 +420,14 @@ with tab3:
                     ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), st.session_state.historial_vtec_3d[:, idx_lat, idx_lon], marker='s', linewidth=2, label=ciudad_obj['name'])
                 ax_lineas.grid(True, linestyle='--'); ax_lineas.set_ylim(vmin_d, vmax_d); ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales))); ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25); ax_lineas.legend(loc="upper right")
                 st.pyplot(fig_lineas); plt.close(fig_lineas)
-
-   # =====================================================================
-    # BLOQUE 2: POR HORAS (24H ÚNICO DÍA - REPRODUCTOR MULTIMEDIA REAL)
+# =====================================================================
+    # BLOQUE 2: POR HORAS (24H ÚNICO DÍA - REPRODUCTOR AUTOMÁTICO REGULABLE)
     # =====================================================================
     elif modo_evolucion == "Por Horas (24h Único Día)":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
         if 'h_historial_vtec_3d' not in st.session_state:
             st.session_state.h_historial_vtec_3d, st.session_state.h_etiquetas_reales = None, []
             st.session_state.h_matriz_maximos, st.session_state.h_ciudades_lista = None, []
-        
-        if 'h_frame_actual' not in st.session_state:
-            st.session_state.h_frame_actual = 0
-        if 'h_reproduciendo' not in st.session_state:
-            st.session_state.h_reproduciendo = False
 
         fecha_analisis_h = st.date_input("Selecciona el día a analizar:", datetime.date(2026, 1, 24), key="ev_fecha_hor")
 
@@ -492,64 +462,46 @@ with tab3:
                     st.session_state.h_historial_vtec_3d = h_temp_3d
                     st.session_state.h_etiquetas_reales = h_temp_etiquetas
                     st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
-                    st.session_state.h_frame_actual = 0
                     st.success("📊 Completado.")
 
         if st.session_state.h_historial_vtec_3d is not None:
             ajuste_local_t3_horas = st.toggle("🔍 Optimizar rango de color al Máx/Mín real de estas 24 horas", key="toggle_t3_horas")
             vmin_h, vmax_h = (max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.h_historial_vtec_3d) + 2))) if ajuste_local_t3_horas else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
-            # 🎬 REPRODUCTOR DINÁMICO INTERACTIVO
-            st.subheader("🎬 Consola de Reproducción Dinámica (Por Horas)")
-            max_h_frames = 24
+            # --- REPRODUCTOR ÚNICO REGULABLE ---
+            st.subheader("🎬 Reproductor de Evolución Horaria")
             
-            h_slider = st.slider("🎞️ Línea de Tiempo:", min_value=0, max_value=max_h_frames - 1, value=st.session_state.h_frame_actual, key="slider_tiempo_horas")
-            st.session_state.h_frame_actual = h_slider
+            velocidad_frames_h = st.slider(
+                "⚡ Rapidez del paso de frames (segundos por mapa):", 
+                min_value=0.1, 
+                max_value=1.5, 
+                value=0.5, 
+                step=0.1,
+                key="slider_velocidad_h"
+            )
 
-            c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4, c_ctrl5, c_ctrl6 = st.columns(6)
-            with c_ctrl1:
-                if st.button("⏮️ Inicio", use_container_width=True, key="btn_h_inicio"):
-                    st.session_state.h_frame_actual = 0; st.session_state.h_reproduciendo = False; st.rerun()
-            with c_ctrl2:
-                if st.button("◀️ Atrás", use_container_width=True, key="btn_h_atras"):
-                    st.session_state.h_frame_actual = max(0, st.session_state.h_frame_actual - 1); st.session_state.h_reproduciendo = False; st.rerun()
-            with c_ctrl3:
-                if st.button("⏸️ Pausa", use_container_width=True, key="btn_h_pausa"):
-                    st.session_state.h_reproduciendo = False
-            with c_ctrl4:
-                if st.button("▶️ Play", use_container_width=True, key="btn_h_play"):
-                    st.session_state.h_reproduciendo = True
-            with c_ctrl5:
-                if st.button("▶️ Avance", use_container_width=True, key="btn_h_adelante"):
-                    st.session_state.h_frame_actual = min(max_h_frames - 1, st.session_state.h_frame_actual + 1); st.session_state.h_reproduciendo = False; st.rerun()
-            with c_ctrl6:
-                if st.button("⏭️ Final", use_container_width=True, key="btn_h_final"):
-                    st.session_state.h_frame_actual = max_h_frames - 1; st.session_state.h_reproduciendo = False; st.rerun()
+            if st.button("▶️ Iniciar Animación Automática", key="btn_play_horas_simple"):
+                contenedor_horas_anim = st.empty()
+                for f in range(len(st.session_state.h_etiquetas_reales)):
+                    fig_a = plt.figure(figsize=(10, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.h_historial_vtec_3d[f, :, :], 
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    ax_a.set_title(f"FRAME HORARIO: {st.session_state.h_etiquetas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
+                    contenedor_horas_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(velocidad_frames_h)
+                
+                st.success("🏁 Reproducción completada.")
 
-            contenedor_h_mapa = st.empty()
-
-            def dibujar_frame_h(idx):
-                fig = plt.figure(figsize=(10, 6), dpi=100)
-                ax = plt.axes(projection=ccrs.PlateCarree())
-                ax.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                ax.add_feature(cfeature.LAND, facecolor='#f6f6f6'); ax.add_feature(cfeature.OCEAN, facecolor='#e3f2fd'); ax.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
-                mapa = ax.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.h_historial_vtec_3d[idx], transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h)
-                plt.colorbar(mapa, ax=ax, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
-                ax.set_title(f"FRAME HORARIO: [{idx + 1}/24] | {st.session_state.h_etiquetas_reales[idx]} UTC", fontsize=10, weight='bold')
-                return fig
-
-            if st.session_state.h_reproduciendo:
-                while st.session_state.h_frame_actual < max_h_frames:
-                    fig_run = dibujar_frame_h(st.session_state.h_frame_actual)
-                    contenedor_h_mapa.pyplot(fig_run); plt.close(fig_run)
-                    time.sleep(0.50)
-                    st.session_state.h_frame_actual += 1
-                st.session_state.h_reproduciendo = False; st.session_state.h_frame_actual = max_h_frames - 1; st.rerun()
-            else:
-                fig_static = dibujar_frame_h(st.session_state.h_frame_actual)
-                contenedor_h_mapa.pyplot(fig_static); plt.close(fig_static)
-
-            # 📌 MAPA DE MÁXIMOS ABSOLUTOS
+            # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
@@ -558,7 +510,7 @@ with tab3:
             fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             st.pyplot(fig_max_h); plt.close(fig_max_h)
 
-            # 📊 GRÁFICAS POR CIUDAD
+            # --- GRÁFICAS POR CIUDAD ---
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             tipo_busqueda_t3h = st.radio("Formato de inserción de localidad (24h):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3h")
             lat_ch, lon_ch, name_ch = None, None, ""
@@ -581,7 +533,7 @@ with tab3:
                     ax_lineas_h.plot(range(24), st.session_state.h_historial_vtec_3d[:, idx_lat, idx_lon], marker='o', linewidth=2, label=ciudad_obj['name'])
                 ax_lineas_h.grid(True, linestyle='--'); ax_lineas_h.set_ylim(vmin_h, vmax_h); ax_lineas_h.set_xticks(range(24)); ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45); ax_lineas_h.legend(loc="upper right")
                 st.pyplot(fig_lineas_h); plt.close(fig_lineas_h)
-   # =====================================================================
+# =====================================================================
     # BLOQUE 3: DÍAS COMPLETOS (RANGO CONTINUO CON REPRODUCTOR MULTIMEDIA REAL)
     # =====================================================================
     elif modo_evolucion == "Días Completos (Rango Continuo)":
