@@ -1,0 +1,146 @@
+[
+    {
+        "nombre": "Aeropuerto de Madrid-Barajas Adolfo Suárez",
+        "ciudad": "Madrid",
+        "latitud": 40.4719,
+        "longitud": -3.5626,
+        "codigo_iata": "MAD",
+        "codigo_icao": "LEMD"
+    },
+    {
+        "nombre": "Aeropuerto Internacional El Dorado",
+        "ciudad": "Bogotá",
+        "latitud": 4.7016,
+        "longitud": -74.1469,
+        "codigo_iata": "BOG",
+        "codigo_icao": "SKBO"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Benito Juárez",
+        "ciudad": "Ciudad de México",
+        "latitud": 19.4363,
+        "longitud": -99.0721,
+        "codigo_iata": "MEX",
+        "codigo_icao": "MMMX"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Jorge Chávez",
+        "ciudad": "Lima",
+        "latitud": -12.0219,
+        "longitud": -77.1143,
+        "codigo_iata": "LIM",
+        "codigo_icao": "SPJC"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Ministro Pistarini",
+        "ciudad": "Buenos Aires",
+        "latitud": -34.8222,
+        "longitud": -58.5358,
+        "codigo_iata": "EZE",
+        "codigo_icao": "SAEZ"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Arturo Merino Benítez",
+        "ciudad": "Santiago",
+        "latitud": -33.393,
+        "longitud": -70.7858,
+        "codigo_iata": "SCL",
+        "codigo_icao": "SCEL"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Mariscal Sucre",
+        "ciudad": "Quito",
+        "latitud": -0.1292,
+        "longitud": -78.3575,
+        "codigo_iata": "UIO",
+        "codigo_icao": "SEQM"
+    },
+    {
+        "nombre": "Aeropuerto Internacional Juan Santamaría",
+        "ciudad": "San José",
+        "latitud": 9.9939,
+        "longitud": -84.2088,
+        "codigo_iata": "SJO",
+        "codigo_icao": "MROC"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de Tocumen",
+        "ciudad": "Panamá",
+        "latitud": 9.0714,
+        "longitud": -79.3835,
+        "codigo_iata": "PTY",
+        "codigo_icao": "MPTO"
+    },
+    {
+        "nombre": "Aeropuerto Internacional John F. Kennedy",
+        "ciudad": "Nueva York",
+        "latitud": 40.6398,
+        "longitud": -73.7789,
+        "codigo_iata": "JFK",
+        "codigo_icao": "KJFK"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de Los Ángeles",
+        "ciudad": "Los Ángeles",
+        "latitud": 34.0522,
+        "longitud": -118.2437,
+        "codigo_iata": "LAX",
+        "codigo_icao": "KLAX"
+    },
+    {
+        "nombre": "Aeropuerto de París-Charles de Gaulle",
+        "ciudad": "París",
+        "latitud": 49.0097,
+        "longitud": 2.5479,
+        "codigo_iata": "CDG",
+        "codigo_icao": "LFPG"
+    },
+    {
+        "nombre": "Aeropuerto de Londres-Heathrow",
+        "ciudad": "Londres",
+        "latitud": 51.47,
+        "longitud": -0.4543,
+        "codigo_iata": "LHR",
+        "codigo_icao": "EGLL"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de Haneda",
+        "ciudad": "Tokio",
+        "latitud": 35.5494,
+        "longitud": 139.7798,
+        "codigo_iata": "HND",
+        "codigo_icao": "RJTT"
+    },
+    {
+        "nombre": "Aeropuerto de Frankfurt",
+        "ciudad": "Fráncfort",
+        "latitud": 50.0333,
+        "longitud": 8.5672,
+        "codigo_iata": "FRA",
+        "codigo_icao": "EDDF"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de São Paulo-Guarulhos",
+        "ciudad": "São Paulo",
+        "latitud": -23.4356,
+        "longitud": -46.4731,
+        "codigo_iata": "GRU",
+        "codigo_icao": "SBGR"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de Miami",
+        "ciudad": "Miami",
+        "latitud": 25.7959,
+        "longitud": -80.2871,
+        "codigo_iata": "MIA",
+        "codigo_icao": "KMIA"
+    },
+    {
+        "nombre": "Aeropuerto Internacional de Maiquetía Simón Bolívar",
+        "ciudad": "Caracas",
+        "latitud": 10.6031,
+        "longitud": -66.9906,
+        "codigo_iata": "CCS",
+        "codigo_icao": "SVMI"
+    }
+]
