@@ -206,7 +206,7 @@ with tab1:
             col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
 
         # -----------------------------------------------------------------
-        # 3. NUEVO: ENTRADA ESPECÍFICA POR CÓDIGO OACI (ICAO)
+        # 3. ENTRADA ESPECÍFICA POR CÓDIGO OACI (ICAO)
         # -----------------------------------------------------------------
         st.divider()
         st.subheader("✈️ Consulta de Parámetros Ionosféricos por Indicador OACI (ICAO)")
