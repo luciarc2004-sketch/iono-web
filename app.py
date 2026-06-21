@@ -1,4 +1,5 @@
 import datetime
+import json
 import requests
 import time
 import numpy as np
@@ -80,7 +81,7 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
     return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
 # =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (ACTUALIZADA)
+# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (CON MAPA DE AEROPUERTOS)
 # =====================================================================
 with tab1:
     st.title("🛰️ Sistema en Tiempo Real de Monitoreo Ionosférico (TEC/TECU)")
@@ -103,16 +104,27 @@ with tab1:
         matriz_vtec_glb = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_glb.json()['data']['grid']['features']]).reshape(73, 73)
         return matriz_vtec_eur, matriz_vtec_glb
 
+    # Carga segura de la lista de aeropuertos desde tu JSON local en el repositorio
+    @st.cache_data
+    def cargar_aeropuertos_json():
+        try:
+            with open("aeropuertos_registrados.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            # Retorno de emergencia vacío por si el archivo no se lee correctamente
+            return []
+
     try:
         matriz_vtec_eur, matriz_vtec_glb = cargar_datos_vtec()
+        lista_aeropuertos = cargar_aeropuertos_json()
+        
         lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
         
         # Generación de interpoladores espaciales lineales en tiempo real
         interp_europa = RegularGridInterpolator((LATS_EUROPA, LONS_EUROPA), matriz_vtec_eur, method='linear', bounds_error=False, fill_value=None)
-        interp_global = RegularGridInterpolator((lats_glb, lats_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
+        interp_global = RegularGridInterpolator((lats_glb, lons_glb), matriz_vtec_glb, method='linear', bounds_error=False, fill_value=None)
 
-
-     # Interruptor de control para el ajuste de escala local solicitado
+        # Interruptor de control para el ajuste de escala local
         ajuste_local_t1 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa", key="toggle_t1")
         
         if ajuste_local_t1:
@@ -124,7 +136,7 @@ with tab1:
             vmin_glb, vmax_glb = VMIN_TECU_FIJO, VMAX_TECU_FIJO
             lbl_status = "Escala Fija Universal (0-55 TECU)"
 
-        # Construcción y renderizado de la figura dual
+        # Construcción y renderizado de la figura dual con Cartopy
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         
         # Sub-mapa 1: Malla Regional Europa
@@ -134,7 +146,15 @@ with tab1:
         ax1.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
         
         map_eur = ax1.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, matriz_vtec_eur, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_eur, vmax=vmax_eur)
-        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC MALLA REGIONAL (TECU) [{lbl_status}]', weight='bold')
+        fig.colorbar(map_eur, ax=ax1, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC REGIONAL (TECU) [{lbl_status}]', weight='bold')
+
+        # [AEROPUERTOS EN MAPA 1] Pintar solo los que caen dentro del encuadre europeo
+        for aero in lista_aeropuertos:
+            lat_a, lon_a = aero["latitud"], aero["longitud"]
+            if (LAT_MIN <= lat_a <= LAT_MAX) and (LON_MIN <= lon_a <= LON_MAX):
+                ax1.plot(lon_a, lat_a, marker='*', color='#ff1744', markersize=7, transform=ccrs.PlateCarree(), zorder=5)
+                # Opcional: etiqueta con el código IATA (MAD, etc.)
+                ax1.text(lon_a + 0.5, lat_a + 0.5, aero["codigo_iata"], fontsize=7, color='black', weight='bold', transform=ccrs.PlateCarree(), zorder=6)
 
         # Sub-mapa 2: Malla Planetaria Global
         ax2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
@@ -146,14 +166,15 @@ with tab1:
         map_glb = ax2.pcolormesh(grid_lon_glb, grid_lat_glb, matriz_vtec_glb, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.8, shading='gouraud', vmin=vmin_glb, vmax=vmax_glb)
         fig.colorbar(map_glb, ax=ax2, orientation='horizontal', pad=0.07, shrink=0.7).set_label(f'VTEC GLOBAL (TECU) [{lbl_status}]', weight='bold')
 
+        # [AEROPUERTOS EN MAPA 2] Pintar la base de datos completa a nivel mundial
+        for aero in lista_aeropuertos:
+            ax2.plot(aero["longitud"], aero["latitud"], marker='.', color='black', markersize=4, transform=ccrs.PlateCarree(), zorder=5)
 
         st.pyplot(fig)
         st.divider()
         
-   
+        # Sección de consultas por localidad justo debajo de los mapas
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
-        
-        # Sistema dual alternativo de entrada de localización
         tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por localidad", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
         
         lat, lon, label_punto = None, None, ""
@@ -168,7 +189,6 @@ with tab1:
             lon_manual = col_l2.number_input("Longitud (°E):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_t1")
             lat, lon, label_punto = lat_manual, lon_manual, f"Coordenadas Puras"
 
-        # Procesamiento dinámico del píxel consultado
         if lat is not None and lon is not None:
             dentro_europa = (LAT_MIN <= lat <= LAT_MAX) and (LON_MIN <= lon <= LON_MAX)
             punto_consulta = np.array([[lat, lon]])
@@ -179,18 +199,12 @@ with tab1:
             col1.metric(label="📍 Punto de Entrada", value=label_punto)
             col2.metric(label="📡 Valor VTEC", value=f"{valor_tecu:.3f} TECU")
             col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
-        else:
-            if tipo_busqueda_t1 == "Buscar por Ciudad/Región": st.error("No se pudo mapear la ciudad.")
-
-        
-    
 
         # -----------------------------------------------------------------
-        #  ENLACES DE INTERÉS Y RECURSOS 
+        # ENLACES DE INTERÉS Y RECURSOS (QUEDAN AL FINAL COMO SOLICITASTE)
         # -----------------------------------------------------------------
         st.divider()
         st.subheader("🔗 Enlaces de Interés y Recursos")
-        
         col_lnk1, col_lnk2, col_lnk3 = st.columns(3)
         
         with col_lnk1:
@@ -208,8 +222,8 @@ with tab1:
             st.markdown("- [CDDIS NASA](https://cddis.nasa.gov/) - Archivo de datos de geodesia espacial.")
             st.markdown("- [Códigos Web](https://github.com/luciarc2004-sketch) - Código público.")
 
-    except Exception as e: st.error(f"Error en Tiempo Real: {e}")
-
+    except Exception as e: 
+        st.error(f"Error en Tiempo Real: {e}")
 # =====================================================================
 # PESTAÑA 2: ANÁLISIS EN EL PASADO
 # =====================================================================
