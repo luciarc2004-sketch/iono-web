@@ -291,10 +291,10 @@ with tab2:
             else: st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
 
 # =====================================================================
-# PESTAÑA 3: EVOLUCIÓN TECU (CÓDIGO ENTERO REESTRUCTURADO)
+# PESTAÑA 3: EVOLUCIÓN TECU (REPRODUCTOR DINÁMICO DE "FLAMES" INYECTADO)
 # =====================================================================
 with tab3:
-    st.title("📈  Evolución Temporal del TECU")
+    st.title("📈 Estudio de Evolución Temporal del TECU")
     
     # Selector unificado en la cabecera con las tres opciones oficiales
     modo_evolucion = st.radio(
@@ -308,7 +308,7 @@ with tab3:
     # BLOQUE 1: POR DÍAS (HORA FIJA)
     # =====================================================================
     if modo_evolucion == "Por Días (Hora Fija)":
-        st.subheader("Fija tu rango temporal a estudiar")
+        st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
         if 'historial_vtec_3d' not in st.session_state:
             st.session_state.historial_vtec_3d, st.session_state.etiquetas_fechas_reales = None, []
             st.session_state.matriz_maximos, st.session_state.ciudades_lista = None, []
@@ -356,6 +356,28 @@ with tab3:
             ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
             vmin_d, vmax_d = (max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.historial_vtec_3d) + 2))) if ajuste_local_t3_dias else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
+            # --- REPRODUCTOR DINÁMICO (MAPA DE FLAMES) ---
+            st.subheader("🎬 Reproductor Dinámico de Evolución (Por Días)")
+            if st.button("▶️ Reproducir Serie Diaria Frame por Frame", key="btn_play_dias_frames"):
+                contenedor_dias_anim = st.empty()
+                for f in range(len(st.session_state.etiquetas_fechas_reales)):
+                    fig_a = plt.figure(figsize=(10, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.historial_vtec_3d[f, :, :], 
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    ax_a.set_title(f"FRAME DIARIO: {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
+                    contenedor_dias_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(0.50) # Cambia cada 0.5 segundos
+
+            # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
             fig_max, ax_mx = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mx.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
@@ -364,6 +386,7 @@ with tab3:
             fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
             st.pyplot(fig_max); plt.close(fig_max)
 
+            # --- GRÁFICAS POR CIUDAD ---
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas")
             tipo_busqueda_t3d = st.radio("Formato de inserción de localidad:", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3d")
             lat_c, lon_c, name_c = None, None, ""
@@ -435,6 +458,28 @@ with tab3:
             ajuste_local_t3_horas = st.toggle("🔍 Optimizar rango de color al Máx/Mín real de estas 24 horas", key="toggle_t3_horas")
             vmin_h, vmax_h = (max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.h_historial_vtec_3d) + 2))) if ajuste_local_t3_horas else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
+            # --- REPRODUCTOR DINÁMICO (MAPA DE FLAMES) ---
+            st.subheader("🎬 Reproductor Dinámico de Evolución (Por Horas)")
+            if st.button("▶️ Reproducir Serie Horaria Frame por Frame", key="btn_play_horas_frames"):
+                contenedor_horas_anim = st.empty()
+                for f in range(len(st.session_state.h_etiquetas_reales)):
+                    fig_a = plt.figure(figsize=(10, 6), dpi=100)
+                    ax_a = plt.axes(projection=ccrs.PlateCarree())
+                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                    
+                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.h_historial_vtec_3d[f, :, :], 
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h, zorder=2)
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
+                    ax_a.set_title(f"FRAME HORARIO: {st.session_state.h_etiquetas_reales[f]} UTC", fontsize=10, weight='bold')
+                    
+                    contenedor_horas_anim.pyplot(fig_a)
+                    plt.close(fig_a)
+                    time.sleep(0.50) # Cambia cada 0.5 segundos
+
+            # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             ax_mxh.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
@@ -443,6 +488,7 @@ with tab3:
             fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
             st.pyplot(fig_max_h); plt.close(fig_max_h)
 
+            # --- GRÁFICAS POR CIUDAD ---
             st.subheader("📊 Gráfica Comparativa de Localidades Acumuladas (24 Horas)")
             tipo_busqueda_t3h = st.radio("Formato de inserción de localidad (24h):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3h")
             lat_ch, lon_ch, name_ch = None, None, ""
@@ -529,19 +575,7 @@ with tab3:
             ajuste_local_dc = st.toggle("🔍 Optimizar rango vertical al Máx/Mín local de esta serie masiva", key="toggle_dc_ejes")
             vmin_dc, vmax_dc = (max(0.0, float(np.floor(np.min(st.session_state.dc_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.dc_historial_vtec_3d) + 2))) if ajuste_local_dc else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
-            # 1. MAPA DE MÁXIMOS ABSOLUTOS
-            st.subheader("📌 Mapa Fijo de Máximos Absolutos del Rango Completo")
-            fig_max_dc, ax_mxdc = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
-            ax_mxdc.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_mxdc.add_feature(cfeature.LAND, facecolor='#f6f6f6')
-            ax_mxdc.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-            ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
-            
-            mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
-            fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
-            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
-
-            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (FLAMES MAPS)
+            # --- REPRODUCTOR DINÁMICO (MAPA DE FLAMES) ---
             st.subheader("🎬 Reproductor Dinámico de la Evolución Continuada")
             if st.button("▶️ Reproducir Serie Completa Frame por Frame", key="btn_play_dc_frames"):
                 contenedor_dc_anim = st.empty()
@@ -554,15 +588,27 @@ with tab3:
                     ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
                     
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_historial_vtec_3d[f, :, :], 
-                                              transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
+                                          transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
                     plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO CONTINUO: {st.session_state.dc_etiquetas_reales[f]} UTC", fontsize=10, weight='bold')
                     
                     contenedor_dc_anim.pyplot(fig_a)
                     plt.close(fig_a)
-                    time.sleep(0.25)
+                    time.sleep(0.50) # Cambia cada 0.5 segundos
 
-            # 3. GRÁFICA DE LOCALIZACIÓN CONTINUA (CIUDAD / COORDENADAS)
+            # --- MAPA DE MÁXIMOS ABSOLUTOS ---
+            st.subheader("📌 Mapa Fijo de Máximos Absolutos del Rango Completo")
+            fig_max_dc, ax_mxdc = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            ax_mxdc.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            ax_mxdc.add_feature(cfeature.LAND, facecolor='#f6f6f6')
+            ax_mxdc.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+            ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
+            
+            mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
+            fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
+            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
+
+            # --- GRÁFICAS POR CIUDAD ---
             st.subheader("📊 Gráfica Continua del Ciclo de Días Completos Encadenados")
             tipo_busqueda_t3dc = st.radio("Formato de inserción de localidad (Modo Continuo):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3dc")
             lat_dcl, lon_dcl, name_dcl = None, None, ""
