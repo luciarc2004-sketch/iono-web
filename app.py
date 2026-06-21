@@ -575,11 +575,53 @@ with tab3:
             ajuste_local_dc = st.toggle("🔍 Optimizar rango vertical al Máx/Mín local de esta serie masiva", key="toggle_dc_ejes")
             vmin_dc, vmax_dc = (max(0.0, float(np.floor(np.min(st.session_state.dc_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.dc_historial_vtec_3d) + 2))) if ajuste_local_dc else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
             
-            # --- REPRODUCTOR DINÁMICO (MAPA DE FLAMES) ---
+           # =====================================================================
+            # 2. REPRODUCTOR DINÁMICO DE FRAMES HORARIOS (CON CONTROLES INTERACTIVOS)
+            # =====================================================================
             st.subheader("🎬 Reproductor Dinámico de la Evolución Continuada")
-            if st.button("▶️ Reproducir Serie Completa Frame por Frame", key="btn_play_dc_frames"):
+            
+            # Inicializamos las variables de control en el Session State si no existen
+            if "anim_paso_velocidad" not in st.session_state:
+                st.session_state.anim_paso_velocidad = 0.50  # Velocidad por defecto (0.5s)
+            if "anim_en_pausa" not in st.session_state:
+                st.session_state.anim_en_pausa = False
+
+            # Creamos una fila de columnas para colocar los botones de control de programación
+            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+            
+            with col_btn1:
+                if st.button("▶️ Iniciar / Reanudar", key="btn_play_dc"):
+                    st.session_state.anim_en_pausa = False
+            
+            with col_btn2:
+                if st.button("⏸️ Pausar", key="btn_pause_dc"):
+                    st.session_state.anim_en_pausa = True
+            
+            with col_btn3:
+                if st.button("🐢 Más Despacio", key="btn_slow_dc"):
+                    # Aumentamos el tiempo de espera entre frames para ralentizar (máximo 1.5 segundos)
+                    st.session_state.anim_paso_velocidad = min(1.5, st.session_state.anim_paso_velocidad + 0.2)
+            
+            with col_btn4:
+                if st.button("⚡ Más Deprisa", key="btn_fast_dc"):
+                    # Disminuimos el tiempo de espera entre frames para acelerar (mínimo 0.1 segundos)
+                    st.session_state.anim_paso_velocidad = max(0.1, st.session_state.anim_paso_velocidad - 0.1)
+
+            # Muestra informativa del estado actual del hilo de ejecución
+            st.caption(f"Velocidad actual de refresco: **{st.session_state.anim_paso_velocidad:.2f} segundos** por frame.")
+
+            # Botón principal que ejecuta la lógica del renderizado secuencial
+            if st.button("🚀 Renderizar Animación", key="btn_execute_dc_frames"):
                 contenedor_dc_anim = st.empty()
-                for f in range(len(st.session_state.dc_etiquetas_reales)):
+                
+                # Iniciamos el recorrido de la matriz de datos 3D
+                f = 0
+                while f < len(st.session_state.dc_etiquetas_reales):
+                    # Si el estado cambia a pausa, detenemos temporalmente el avance incrementando el tiempo de espera
+                    if st.session_state.anim_en_pausa:
+                        time.sleep(0.5)
+                        continue  # Reintenta la misma iteración sin avanzar el índice 'f'
+                    
                     fig_a = plt.figure(figsize=(11, 6), dpi=100)
                     ax_a = plt.axes(projection=ccrs.PlateCarree())
                     ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
@@ -594,7 +636,10 @@ with tab3:
                     
                     contenedor_dc_anim.pyplot(fig_a)
                     plt.close(fig_a)
-                    time.sleep(0.50) # Cambia cada 0.5 segundos
+                    
+                    # El delay de la ejecución se controla dinámicamente con la variable modificada por los botones
+                    time.sleep(st.session_state.anim_paso_velocidad)
+                    f += 1  # Avanzamos al siguiente frame de datos
 
             # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Rango Completo")
