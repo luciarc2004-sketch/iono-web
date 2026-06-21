@@ -81,7 +81,7 @@ def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
     return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
 # =====================================================================
-# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (CONSOLA AERONÁUTICA ACTUALIZADA)
+# PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (VERSIÓN AERONÁUTICA PRO)
 # =====================================================================
 with tab1:
     st.title("🛰️ Sistema en Tiempo Real de Monitoreo Ionosférico (TEC/TECU)")
@@ -104,20 +104,34 @@ with tab1:
         matriz_vtec_glb = np.array([f['properties']['vtec_assimilated_tecu'] for f in res_glb.json()['data']['grid']['features']]).reshape(73, 73)
         return matriz_vtec_eur, matriz_vtec_glb
 
-    # NUEVO MOTOR DE CARGA: Transforma el diccionario de aeropuertos en un iterable compatible
+    # MOTOR DE CARGA DE ALTA VELOCIDAD: Filtra en memoria y prepara vectores masivos
     @st.cache_data
-    def cargar_aeropuertos_nuevo_json():
+    def cargar_aeropuertos_optimizado():
         try:
             with open("aeropuertos_registrados.json", "r", encoding="utf-8") as f:
                 datos_dict = json.load(f)
-                # Extraemos solo los valores de cada clave ("00AK", etc.) para tener una lista limpia
-                return list(datos_dict.values())
+            
+            aeropuertos_europa = []
+            lats_globales = []
+            lons_globales = []
+            
+            for aero in datos_dict.values():
+                lat_a = aero.get("lat")
+                lon_a = aero.get("lon")
+                if lat_a is not None and lon_a is not None:
+                    lats_globales.append(lat_a)
+                    lons_globales.append(lon_a)
+                    
+                    if (LAT_MIN <= lat_a <= LAT_MAX) and (LON_MIN <= lon_a <= LON_MAX):
+                        aeropuertos_europa.append(aero)
+                        
+            return aeropuertos_europa, lons_globales, lats_globales, datos_dict
         except Exception:
-            return []
+            return [], [], [], {}
 
     try:
         matriz_vtec_eur, matriz_vtec_glb = cargar_datos_vtec()
-        lista_aeropuertos = cargar_aeropuertos_nuevo_json()
+        lista_aero_eur, lons_glb_aero, lats_glb_aero, diccionario_completo_aero = cargar_aeropuertos_optimizado()
         
         lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
         
@@ -138,7 +152,7 @@ with tab1:
             lbl_status = "Escala Fija Universal (0-55 TECU)"
 
         # -----------------------------------------------------------------
-        # BLOQUE 1: MAPAS PUROS DE IONOSFERA (SIN MARCADORES QUE SATUREN)
+        # 1. MAPAS PUROS DE IONOSFERA (MAPAS DEL PUNTO)
         # -----------------------------------------------------------------
         fig_tecu, (ax_t1, ax_t2) = plt.subplots(1, 2, figsize=(18, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         
@@ -163,7 +177,9 @@ with tab1:
         plt.close(fig_tecu)
         st.divider()
         
-        # Sección de consultas numéricas por localidad
+        # -----------------------------------------------------------------
+        # 2. SISTEMA DE CONSULTA POR COORDENADAS O LOCALIDAD GENERAL
+        # -----------------------------------------------------------------
         st.subheader("🔍 Consulta de TECU por Localidad o Coordenadas")
         tipo_busqueda_t1 = st.radio("Elige el método de posicionamiento:", ["Buscar por localidad", "Introducir Coordenadas Manuales (Lat/Lon)"], horizontal=True, key="radio_t1")
         
@@ -190,50 +206,73 @@ with tab1:
             col3.info(f"**Coordenadas de Análisis:** {lat:.4f}°N, {lon:.4f}°E\n\n**Fuente del Dato:** {fuente}")
 
         # -----------------------------------------------------------------
-        # BLOQUE 2: NUEVOS MAPAS EXCLUSIVOS DE INFRAESTRUCTURA DE AEROPUERTOS
+        # 3. NUEVO: ENTRADA ESPECÍFICA POR CÓDIGO OACI (ICAO)
+        # -----------------------------------------------------------------
+        st.divider()
+        st.subheader("✈️ Consulta de Parámetros Ionosféricos por Indicador OACI (ICAO)")
+        oaci_codigo = st.text_input("Introduce el código de 4 letras del aeropuerto (ej. LEMD, SKBO, KJFK):", value="LEMD", key="txt_oaci_t1").strip().upper()
+        
+        if oaci_codigo:
+            if oaci_codigo in diccionario_completo_aero:
+                aero_info = diccionario_completo_aero[oaci_codigo]
+                lat_oaci = aero_info.get("lat")
+                lon_oaci = aero_info.get("lon")
+                nombre_oaci = aero_info.get("name", "Desconocido")
+                ciudad_oaci = aero_info.get("city", "Desconocido")
+                pais_oaci = aero_info.get("country", "Desconocido")
+                
+                # Calcular el TECU en tiempo real para el aeropuerto localizado
+                dentro_eur_oaci = (LAT_MIN <= lat_oaci <= LAT_MAX) and (LON_MIN <= lon_oaci <= LON_MAX)
+                pt_oaci = np.array([[lat_oaci, lon_oaci]])
+                tecu_oaci = float(interp_europa(pt_oaci)[0]) if dentro_eur_oaci else float(interp_global(pt_oaci)[0])
+                fuente_oaci = "Regional Europa" if dentro_eur_oaci else "Planetaria Global"
+                
+                # Despliegue de métricas aeronáuticas profesionales
+                c_oa1, c_oa2, c_oa3 = st.columns(3)
+                c_oa1.metric(label="🏢 Aeropuerto Detectado", value=nombre_oaci)
+                c_oa2.metric(label="📡 Carga Ionosférica", value=f"{tecu_oaci:.3f} TECU")
+                c_oa3.success(f"**Ubicación:** {ciudad_oaci}, {pais_oaci}\n\n**Coordenadas:** {lat_oaci:.4f}°N, {lon_oaci:.4f}°E\n\n**Capa de Red:** {fuente_oaci}")
+            else:
+                st.warning(f"⚠️ El código OACI '{oaci_codigo}' no se encuentra en la base de datos aeropuertos_registrados.json.")
+
+        # -----------------------------------------------------------------
+        # 4. MAPAS DE INFRAESTRUCTURA DE AEROPUERTOS (DELANTE DE LOS LINKS)
         # -----------------------------------------------------------------
         st.divider()
         st.subheader("🛩️ Infraestructura Aeronáutica Registrada en la Base de Datos")
         
         fig_aero, (ax_a1, ax_a2) = plt.subplots(1, 2, figsize=(18, 7.5), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
         
-        # 1. Mapa Europa Fijo Aeropuertos
+        # Mapa Europa Aeropuertos
         ax_a1.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
         ax_a1.add_feature(cfeature.LAND, facecolor='#eeeeee')
-        ax_a1.add_feature(cfeature.OCEAN, facecolor='#e0f2f1') # Tono aguamarina claro aeronáutico
+        ax_a1.add_feature(cfeature.OCEAN, facecolor='#e0f2f1')
         ax_a1.add_feature(cfeature.COASTLINE, edgecolor='#37474f', linewidth=1.2)
         ax_a1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#78909c', linewidth=0.7)
         ax_a1.set_title("📍 Red de Aeródromos Registrados (Región Europa)", weight='bold', fontsize=11)
 
-        # 2. Mapa Mundial Fijo Aeropuertos
+        for aero in lista_aero_eur:
+            lat_a, lon_a = aero["lat"], aero["lon"]
+            ax_a1.plot(lon_a, lat_a, marker='*', color='#00e676', markersize=6, transform=ccrs.PlateCarree(), zorder=5)
+            label_aero = aero.get("iata") if aero.get("iata") else aero.get("icao", "")
+            if label_aero:
+                ax_a1.text(lon_a + 0.3, lat_a + 0.3, label_aero, fontsize=6, color='#263238', weight='bold', transform=ccrs.PlateCarree(), zorder=6)
+
+        # Mapa Mundial Aeropuertos
         ax_a2.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
         ax_a2.add_feature(cfeature.LAND, facecolor='#eeeeee')
         ax_a2.add_feature(cfeature.OCEAN, facecolor='#e0f2f1')
         ax_a2.add_feature(cfeature.COASTLINE, edgecolor='#37474f', linewidth=0.8)
         ax_a2.set_title("🗺️ Cobertura Global de la Infraestructura Registrada", weight='bold', fontsize=11)
 
-        # Bucle de pintado mapeando las nuevas llaves estricta del JSON ('lat' y 'lon')
-        for aero in lista_aeropuertos:
-            lat_a = aero.get("lat")
-            lon_a = aero.get("lon")
-            
-            if lat_a is not None and lon_a is not None:
-                # Pintado en el mapa mundial (Puntos de referencia discretos)
-                ax_a2.plot(lon_a, lat_a, marker='.', color='#ff3d00', markersize=2, transform=ccrs.PlateCarree(), zorder=4)
-                
-                # Pintado en el mapa europeo (Estrellas con etiqueta de texto)
-                if (LAT_MIN <= lat_a <= LAT_MAX) and (LON_MIN <= lon_a <= LON_MAX):
-                    ax_a1.plot(lon_a, lat_a, marker='*', color='#00e676', markersize=6, transform=ccrs.PlateCarree(), zorder=5)
-                    # Si tiene código IATA válido, lo pinta, si no, usa el OACI (ICAO)
-                    label_aero = aero.get("iata") if aero.get("iata") else aero.get("icao", "")
-                    if label_aero:
-                        ax_a1.text(lon_a + 0.3, lat_a + 0.3, label_aero, fontsize=6, color='#263238', weight='bold', transform=ccrs.PlateCarree(), zorder=6)
+        if lons_glb_aero and lats_glb_aero:
+            ax_a2.scatter(lons_glb_aero, lats_glb_aero, color='#ff3d00', s=1.5, transform=ccrs.PlateCarree(), zorder=4)
 
         st.pyplot(fig_aero)
         plt.close(fig_aero)
 
         # -----------------------------------------------------------------
-        # ENLACES DE INTERÉS Y RECURSOS (AL FINAL ABSOLUTO)
+        # 5. ENLACES DE INTERÉS Y RECURSOS (AL FINAL ABSOLUTO)
         # -----------------------------------------------------------------
         st.divider()
         st.subheader("🔗 Enlaces de Interés y Recursos")
