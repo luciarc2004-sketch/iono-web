@@ -10,7 +10,8 @@ import cartopy.feature as cfeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from scipy.interpolate import RegularGridInterpolator
 import streamlit as st
-
+from skyfield.api 
+import Topos, load, EarthSatellite  
 # Configuración de la página web limpia
 st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 
