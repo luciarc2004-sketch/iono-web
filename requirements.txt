@@ -6,3 +6,5 @@ geopy
 requests
 streamlit
 scipy
+pandas
+skyfield
