@@ -1392,17 +1392,14 @@ with tab6:
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
 
-
-
-
 # =====================================================================
-# PESTAÑA: TRACKING SATELITAL GLOBAL (CONSOLA INTERACTIVA AUTOMATIZADA)
+# PESTAÑA: TRACKING SATELITAL GLOBAL (SISTEMA DE DATOS MANUALES TLE)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola de Tracking GNSS Interactiva")
+    st.title("🛰️ Consola de Tracking GNSS (Modo TLE Manual)")
     st.markdown("""
-    Configura tu punto de observación global para escanear la bóveda celeste en busca de satélites 
-    de navegación operacionales. Los datos orbitales se descargan en tiempo real desde la NORAD (CelesTrak).
+    Configura tu punto de observación y pega los datos orbitales crudos (formato TLE) de las constelaciones 
+    para calcular la geometría y visibilidad satelital al instante, sin depender de conexiones externas.
     """)
     st.divider()
 
@@ -1423,47 +1420,40 @@ with tab_aviacion:
             "Selecciona el método de ubicación:", 
             ["Buscar por localidad / ciudad", "Coordenadas manuales (Lat/Lon)"], 
             horizontal=True, 
-            key="radio_track_int"
+            key="radio_track_man"
         )
         
         lat_target, lon_target, label_ubicacion = None, None, ""
 
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
-            ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_int")
+            ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_man")
             if ciudad_usuario:
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
-            lat_target = col_u1.number_input("Latitud (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_int")
-            lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_int")
+            lat_target = col_u1.number_input("Latitud (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_man")
+            lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_man")
             label_ubicacion = f"Coordenadas {lat_target:.2f}°, {lon_target:.2f}°"
 
-        angulo_mascara = st.slider("Resolución / Ángulo de máscara de seguridad (°):", 0.0, 20.0, 5.0, step=0.5, key="sld_mascara_int")
+        angulo_mascara = st.slider("Resolución / Ángulo de máscara de seguridad (°):", 0.0, 20.0, 5.0, step=0.5, key="sld_mascara_man")
 
         # -----------------------------------------------------------------
-        # 2. MOTOR DE PROCESAMIENTO ORBITAL (FUNCIÓN INTERNA)
+        # 2. MOTOR DE PROCESAMIENTO ORBITAL (LECTURA DE TEXTO)
         # -----------------------------------------------------------------
-        def analizar_red_satelital(nombre_red, url_base, observador_topos):
-            # Envolver la URL en el proxy transparente para evitar bloqueos de CelesTrak
-            url_segura = f"https://corsproxy.io/?{url_base}"
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Cache-Control": "no-cache"
-            }
-            
-            response = requests.get(url_segura, headers=headers, timeout=25)
-            if response.status_code != 200:
-                st.error(f"Error al descargar los datos. El servidor respondió con el código: {response.status_code}")
+        def procesar_texto_tle(nombre_red, texto_tle_crudo, observador_topos):
+            if not texto_tle_crudo.strip():
+                st.warning("El cuadro de texto está vacío. Pega los datos TLE antes de escanear.")
                 return
-                
-            tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
+
+            # Separar el texto pegado en líneas, quitando espacios en blanco extra
+            tle_lines = [line.strip() for line in texto_tle_crudo.strip().split('\n') if line.strip()]
             
             total_red = 0
             linea_vista_teorica = 0
             linea_vista_segura = 0
             tabla_resultados = []
             
+            # Leer el bloque TLE de 3 en 3 líneas (Nombre, Línea 1, Línea 2)
             for i in range(0, len(tle_lines), 3):
                 if i + 2 >= len(tle_lines): break
                     
@@ -1471,6 +1461,7 @@ with tab_aviacion:
                 linea1 = tle_lines[i+1]
                 linea2 = tle_lines[i+2]
                 
+                # Validación básica para asegurar que son líneas TLE correctas
                 if not (linea1.startswith('1 ') and linea2.startswith('2 ')): continue
                     
                 total_red += 1
@@ -1501,54 +1492,57 @@ with tab_aviacion:
             # Renderizado visual de los resultados
             st.divider()
             c1, c2, c3 = st.columns(3)
-            c1.metric("Satélites en Órbita", total_red)
+            c1.metric("Satélites en Lista TLE", total_red)
             c2.metric("En Vista Teórica (>0°)", linea_vista_teorica)
             c3.metric(f"Enlace Seguro (>={angulo_mascara}°)", linea_vista_segura)
             
             if tabla_resultados:
-                st.success(f"✅ Análisis completado. Se detectaron **{linea_vista_segura}** satélites operacionales para {nombre_red}.")
+                st.success(f"✅ Análisis completado instantáneamente. Se detectaron **{linea_vista_segura}** satélites operacionales para {nombre_red}.")
                 st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
+            elif total_red > 0:
+                st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara especificado sobre tus coordenadas.")
             else:
-                st.warning("No se encontraron satélites que superen el ángulo de máscara especificado.")
+                st.error("No se pudo reconocer ningún formato TLE válido en el texto proporcionado.")
 
         # -----------------------------------------------------------------
-        # 3. APARTADOS DE CONSTELACIONES (SUB-PESTAÑAS)
+        # 3. APARTADOS DE CONSTELACIONES (CAJAS DE TEXTO)
         # -----------------------------------------------------------------
         if lat_target is not None and lon_target is not None:
             st.success(f"✅ **Observatorio configurado en:** {label_ubicacion} ({lat_target:.4f}°, {lon_target:.4f}°)")
             observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
             
-            st.subheader("📡 2. Análisis por Constelación")
+            st.subheader("📡 2. Introducción de Datos Orbitales")
             
             # Crear las 3 pestañas internas
             tab_gps, tab_glo, tab_gal = st.tabs(["🇺🇸 Constelación GPS", "🇷🇺 Constelación GLONASS", "🇪🇺 Constelación Galileo"])
             
             # --- APARTADO GPS ---
             with tab_gps:
-                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/gps-ops.txt`")
-                if st.button("🚀 Escanear Red GPS", key="btn_gps"):
-                    with st.spinner("Descargando y procesando efemérides GPS..."):
-                        analizar_red_satelital("GPS", "https://celestrak.org/NORAD/elements/gps-ops.txt", observador)
+                st.info("Obtén los datos oficiales aquí: [CelesTrak GPS TLE](https://celestrak.org/NORAD/elements/gps-ops.txt)")
+                texto_gps = st.text_area("Pega aquí el bloque completo de texto TLE para GPS:", height=200, key="area_gps")
+                if st.button("🚀 Procesar Datos GPS", key="btn_gps_man"):
+                    procesar_texto_tle("GPS", texto_gps, observador)
 
             # --- APARTADO GLONASS ---
             with tab_glo:
-                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/glo-ops.txt`")
-                if st.button("🚀 Escanear Red GLONASS", key="btn_glo"):
-                    with st.spinner("Descargando y procesando efemérides GLONASS..."):
-                        analizar_red_satelital("GLONASS", "https://celestrak.org/NORAD/elements/glo-ops.txt", observador)
+                st.info("Obtén los datos oficiales aquí: [CelesTrak GLONASS TLE](https://celestrak.org/NORAD/elements/glo-ops.txt)")
+                texto_glo = st.text_area("Pega aquí el bloque completo de texto TLE para GLONASS:", height=200, key="area_glo")
+                if st.button("🚀 Procesar Datos GLONASS", key="btn_glo_man"):
+                    procesar_texto_tle("GLONASS", texto_glo, observador)
 
             # --- APARTADO GALILEO ---
             with tab_gal:
-                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/galileo.txt`")
-                if st.button("🚀 Escanear Red Galileo", key="btn_gal"):
-                    with st.spinner("Descargando y procesando efemérides Galileo..."):
-                        analizar_red_satelital("Galileo", "https://celestrak.org/NORAD/elements/galileo.txt", observador)
+                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/galileo.txt)")
+                texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
+                if st.button("🚀 Procesar Datos Galileo", key="btn_gal_man"):
+                    procesar_texto_tle("Galileo", texto_gal, observador)
 
         else:
-            st.error("Configura una ubicación válida arriba para desbloquear los paneles de constelaciones.")
+            st.error("Configura una ubicación válida arriba para desbloquear los paneles de análisis.")
 
     except Exception as e:
         st.error(f"Error crítico en el módulo: {e}")
+
 
 
 
