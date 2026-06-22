@@ -1396,22 +1396,15 @@ with tab6:
 
 
 # =====================================================================
-# PESTAÑA: TRACKING SATELITAL GLOBAL (CUALQUIER LOCALIDAD O COORDENADA)
+# PESTAÑA: TRACKING SATELITAL GLOBAL (CONSOLA INTERACTIVA AUTOMATIZADA)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola Global de Disponibilidad y Tracking GNSS")
+    st.title("🛰️ Consola de Tracking GNSS Interactiva")
     st.markdown("""
-    Analiza en tiempo real la geometría y visibilidad de las constelaciones **GPS, GLONASS y Galileo** sobre **cualquier punto del planeta**. Introduce una localidad o tus coordenadas exactas para 
-    calcular los satélites que cubren tu posición en este instante.
+    Configura tu punto de observación global para escanear la bóveda celeste en busca de satélites 
+    de navegación operacionales. Los datos orbitales se descargan en tiempo real desde la NORAD (CelesTrak).
     """)
     st.divider()
-
-    # 1. Configuración de URLs dinámicas originales con Proxy Transparente
-    GNSS_URLS = {
-        "GPS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
-        "GLONASS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
-        "Galileo": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
-    }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
     @st.cache_resource
@@ -1422,146 +1415,140 @@ with tab_aviacion:
         ts = inicializar_skyfield()
         tiempo_actual = ts.now()
 
-        # 2. Interfaz de posicionamiento universal
-        st.subheader("📍 Definir Punto de Observación")
+        # -----------------------------------------------------------------
+        # 1. PARÁMETROS GLOBALES (UBICACIÓN Y RESOLUCIÓN)
+        # -----------------------------------------------------------------
+        st.subheader("📍 1. Configuración del Observador")
         tipo_posicionamiento = st.radio(
             "Selecciona el método de ubicación:", 
             ["Buscar por localidad / ciudad", "Coordenadas manuales (Lat/Lon)"], 
             horizontal=True, 
-            key="radio_tracking_universal"
+            key="radio_track_int"
         )
         
         lat_target, lon_target, label_ubicacion = None, None, ""
 
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
-            ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_tracking")
+            ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_int")
             if ciudad_usuario:
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
-            lat_target = col_u1.number_input("Latitud (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_tracking")
-            lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_tracking")
+            lat_target = col_u1.number_input("Latitud (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_int")
+            lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_int")
             label_ubicacion = f"Coordenadas {lat_target:.2f}°, {lon_target:.2f}°"
 
-        # Control del ángulo de máscara
-        angulo_mascara = st.slider("Ángulo de máscara de seguridad horizonte (°):", 0.0, 15.0, 5.0, step=0.5, key="sld_mascara_tracking")
+        angulo_mascara = st.slider("Resolución / Ángulo de máscara de seguridad (°):", 0.0, 20.0, 5.0, step=0.5, key="sld_mascara_int")
 
-        # 3. Procesamiento y cálculo orbital si la ubicación es válida
-        if lat_target is not None and lon_target is not None:
-            st.success(f"🎯 **Punto de Análisis Activo:** {label_ubicacion} | **Lat:** {lat_target:.4f}° | **Lon:** {lon_target:.4f}°")
+        # -----------------------------------------------------------------
+        # 2. MOTOR DE PROCESAMIENTO ORBITAL (FUNCIÓN INTERNA)
+        # -----------------------------------------------------------------
+        def analizar_red_satelital(nombre_red, url_base, observador_topos):
+            # Envolver la URL en el proxy transparente para evitar bloqueos de CelesTrak
+            url_segura = f"https://corsproxy.io/?{url_base}"
             
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Cache-Control": "no-cache"
+            }
+            
+            response = requests.get(url_segura, headers=headers, timeout=25)
+            if response.status_code != 200:
+                st.error(f"Error al descargar los datos. El servidor respondió con el código: {response.status_code}")
+                return
+                
+            tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
+            
+            total_red = 0
+            linea_vista_teorica = 0
+            linea_vista_segura = 0
+            tabla_resultados = []
+            
+            for i in range(0, len(tle_lines), 3):
+                if i + 2 >= len(tle_lines): break
+                    
+                nombre_sat = tle_lines[i]
+                linea1 = tle_lines[i+1]
+                linea2 = tle_lines[i+2]
+                
+                if not (linea1.startswith('1 ') and linea2.startswith('2 ')): continue
+                    
+                total_red += 1
+                try:
+                    satelite = EarthSatellite(linea1, linea2, nombre_sat, ts)
+                    diferencia = satelite - observador_topos
+                    topocentrico = diferencia.at(tiempo_actual)
+                    alt, az, _ = topocentrico.altaz()
+                    
+                    if alt.degrees > 0:
+                        linea_vista_teorica += 1
+                        
+                    if alt.degrees >= angulo_mascara:
+                        linea_vista_segura += 1
+                        
+                        subpoint = satelite.at(tiempo_actual).subpoint()
+                        tabla_resultados.append({
+                            "Satélite": nombre_sat,
+                            "Lat (°N)": round(subpoint.latitude.degrees, 2),
+                            "Lon (°E)": round(subpoint.longitude.degrees, 2),
+                            "Altitud (km)": round(subpoint.elevation.km, 1),
+                            "Elevación (°)": round(alt.degrees, 2),
+                            "Azimut (°)": round(az.degrees, 1)
+                        })
+                except Exception:
+                    continue
+
+            # Renderizado visual de los resultados
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Satélites en Órbita", total_red)
+            c2.metric("En Vista Teórica (>0°)", linea_vista_teorica)
+            c3.metric(f"Enlace Seguro (>={angulo_mascara}°)", linea_vista_segura)
+            
+            if tabla_resultados:
+                st.success(f"✅ Análisis completado. Se detectaron **{linea_vista_segura}** satélites operacionales para {nombre_red}.")
+                st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
+            else:
+                st.warning("No se encontraron satélites que superen el ángulo de máscara especificado.")
+
+        # -----------------------------------------------------------------
+        # 3. APARTADOS DE CONSTELACIONES (SUB-PESTAÑAS)
+        # -----------------------------------------------------------------
+        if lat_target is not None and lon_target is not None:
+            st.success(f"✅ **Observatorio configurado en:** {label_ubicacion} ({lat_target:.4f}°, {lon_target:.4f}°)")
             observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
             
-            if st.button("📡 Iniciar Escaneo de Órbitas Terrestres", key="btn_scan_universal"):
-                resumen_metricas = {}
-                
-                st.divider()
-                st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
-                
-                for nombre_grupo, url in GNSS_URLS.items():
-                    with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
-                        try:
-                            # Cabeceras ultrarrealistas que fuerzan a no usar caché (Cache-Control)
-                            headers = {
-                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                                "Accept-Language": "en-US,en;q=0.5",
-                                "Cache-Control": "no-cache",
-                                "Pragma": "no-cache"
-                            }
-                            
-                            response = requests.get(url, headers=headers, timeout=25)
-                            
-                            if response.status_code != 200:
-                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}. Código: {response.status_code}")
-                                continue
-                                
-                            tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
-                            
-                            total_red = 0
-                            linea_vista_teorica = 0
-                            linea_vista_segura = 0
-                            tabla_satelites_visibles = []
-                            
-                            # Procesar el bloque TLE de 3 en 3 líneas
-                            for i in range(0, len(tle_lines), 3):
-                                if i + 2 >= len(tle_lines): break
-                                    
-                                nombre_sat = tle_lines[i]
-                                linea1 = tle_lines[i+1]
-                                linea2 = tle_lines[i+2]
-                                
-                                if not (linea1.startswith('1 ') and linea2.startswith('2 ')): continue
-                                    
-                                total_red += 1
-                                
-                                try:
-                                    satelite = EarthSatellite(linea1, linea2, nombre_sat, ts)
-                                    diferencia = satelite - observador
-                                    topocentrico = diferencia.at(tiempo_actual)
-                                    alt, az, _ = topocentrico.altaz()
-                                    
-                                    if alt.degrees > 0:
-                                        linea_vista_teorica += 1
-                                        
-                                    if alt.degrees >= angulo_mascara:
-                                        linea_vista_segura += 1
-                                        
-                                        geocentrico = satelite.at(tiempo_actual)
-                                        subpoint = geocentrico.subpoint()
-                                        
-                                        tabla_satelites_visibles.append({
-                                            "Satélite": nombre_sat,
-                                            "Latitud Subpt (°N)": round(subpoint.latitude.degrees, 2),
-                                            "Longitud Subpt (°E)": round(subpoint.longitude.degrees, 2),
-                                            "Altitud (km)": round(subpoint.elevation.km, 1),
-                                            "Elevación (° Alt)": round(alt.degrees, 2),
-                                            "Azimut (°)": round(az.degrees, 1)
-                                        })
-                                except Exception:
-                                    continue
-                                    
-                            resumen_metricas[nombre_grupo] = {
-                                "total": total_red,
-                                "teorico": linea_vista_teorica,
-                                "seguro": linea_vista_segura
-                            }
-                            
-                            with st.expander(f"🛰️ Detalles {nombre_grupo} ({linea_vista_segura} Satélites Disponibles)"):
-                                if tabla_satelites_visibles:
-                                    st.dataframe(pd.DataFrame(tabla_satelites_visibles), use_container_width=True, hide_index=True)
-                                else:
-                                    st.info(f"No hay satélites de {nombre_grupo} sobre {angulo_mascara}° de elevación.")
-                                    
-                        except Exception as e:
-                            st.error(f"Fallo al procesar la red {nombre_grupo}: {e}")
-                
-                # 4. Tabla resumen comparativa global
-                st.divider()
-                st.subheader("📈 Resumen Ejecutivo de Cobertura Espacial")
-                
-                if resumen_metricas:
-                    columnas_resumen = []
-                    for red, datos in resumen_metricas.items():
-                        columnas_resumen.append({
-                            "Constelación GNSS": red,
-                            "Flota Activa en Órbita": datos["total"],
-                            "Vista Teórica (>0°)": datos["teorico"],
-                            f"Enlace Útil (=={angulo_mascara}°)": datos["seguro"]
-                        })
-                    
-                    st.table(pd.DataFrame(columnas_resumen))
-                    
-                    satelites_totales = sum(d["seguro"] for d in resumen_metricas.values())
-                    if satelites_totales >= 4:
-                        st.success(f"✅ Triangulación óptima. {satelites_totales} satélites disponibles aseguran cálculos geométricos estables.")
-                    else:
-                        st.warning(f"⚠️ Geometría deficiente. Solo {satelites_totales} satélites sobre el horizonte seguro.")
+            st.subheader("📡 2. Análisis por Constelación")
+            
+            # Crear las 3 pestañas internas
+            tab_gps, tab_glo, tab_gal = st.tabs(["🇺🇸 Constelación GPS", "🇷🇺 Constelación GLONASS", "🇪🇺 Constelación Galileo"])
+            
+            # --- APARTADO GPS ---
+            with tab_gps:
+                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/gps-ops.txt`")
+                if st.button("🚀 Escanear Red GPS", key="btn_gps"):
+                    with st.spinner("Descargando y procesando efemérides GPS..."):
+                        analizar_red_satelital("GPS", "https://celestrak.org/NORAD/elements/gps-ops.txt", observador)
+
+            # --- APARTADO GLONASS ---
+            with tab_glo:
+                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/glo-ops.txt`")
+                if st.button("🚀 Escanear Red GLONASS", key="btn_glo"):
+                    with st.spinner("Descargando y procesando efemérides GLONASS..."):
+                        analizar_red_satelital("GLONASS", "https://celestrak.org/NORAD/elements/glo-ops.txt", observador)
+
+            # --- APARTADO GALILEO ---
+            with tab_gal:
+                st.info("ℹ️ **Fuente de Datos Orbitales:** `https://celestrak.org/NORAD/elements/galileo.txt`")
+                if st.button("🚀 Escanear Red Galileo", key="btn_gal"):
+                    with st.spinner("Descargando y procesando efemérides Galileo..."):
+                        analizar_red_satelital("Galileo", "https://celestrak.org/NORAD/elements/galileo.txt", observador)
+
         else:
-            st.error("Por favor, introduce una localización o coordenadas válidas para iniciar los cálculos.")
+            st.error("Configura una ubicación válida arriba para desbloquear los paneles de constelaciones.")
 
     except Exception as e:
-        st.error(f"Error general en el sistema de cálculo orbital: {e}")
+        st.error(f"Error crítico en el módulo: {e}")
 
 
 
