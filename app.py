@@ -1393,9 +1393,8 @@ with tab6:
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
 
-
 # =====================================================================
-# PESTAÑA: TRACKING SATELITAL GLOBAL (CON MAPA IONOSFÉRICO INTEGRADO)
+# PESTAÑA: TRACKING SATELITAL GLOBAL (MAPA IONOSFÉRICO + ID DE TRACKING)
 # =====================================================================
 with tab_aviacion:
     st.title("🛰️ Consola de Tracking GNSS y Clima Espacial")
@@ -1463,6 +1462,7 @@ with tab_aviacion:
             tle_lines = [line.strip() for line in texto_tle_crudo.strip().split('\n') if line.strip()]
             total_red, linea_vista_teorica, linea_vista_segura = 0, 0, 0
             tabla_resultados = []
+            id_satelite = 1  # Contador para asignar número a los visibles
             
             for i in range(0, len(tle_lines), 3):
                 if i + 2 >= len(tle_lines): break
@@ -1485,7 +1485,10 @@ with tab_aviacion:
                     if alt.degrees >= angulo_mascara:
                         linea_vista_segura += 1
                         subpoint = satelite.at(tiempo_actual).subpoint()
+                        
+                        # Guardamos el ID junto con los datos
                         tabla_resultados.append({
+                            "ID": id_satelite,
                             "Satélite": nombre_sat,
                             "Lat (°N)": round(subpoint.latitude.degrees, 2),
                             "Lon (°E)": round(subpoint.longitude.degrees, 2),
@@ -1493,6 +1496,7 @@ with tab_aviacion:
                             "Elevación (°)": round(alt.degrees, 2),
                             "Azimut (°)": round(az.degrees, 1)
                         })
+                        id_satelite += 1
                 except Exception:
                     continue
 
@@ -1529,6 +1533,14 @@ with tab_aviacion:
                 lons_sats = [s["Lon (°E)"] for s in tabla_resultados]
                 ax.scatter(lons_sats, lats_sats, color='black', edgecolor='white', s=60, transform=ccrs.PlateCarree(), zorder=5, label='Satélites en Vista')
                 
+                # Capa 4: Etiquetas numéricas (ID) junto a cada satélite
+                for sat in tabla_resultados:
+                    # Añadimos un pequeño margen (+2 grados) para que el texto no tape el punto
+                    ax.text(sat["Lon (°E)"] + 2, sat["Lat (°N)"] + 2, str(sat["ID"]), 
+                            color='black', fontsize=9, weight='bold', 
+                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.2'),
+                            transform=ccrs.PlateCarree(), zorder=7)
+
                 ax.legend(loc='lower left', framealpha=0.9)
                 plt.title(f"Cobertura Espacial de {nombre_red} sobre Mapa TECU Global", weight='bold', fontsize=12)
                 
@@ -1536,6 +1548,7 @@ with tab_aviacion:
                 plt.close(fig)
                 # -----------------------------------
 
+                # Mostrar la tabla, ahora el ID será la primera columna visible
                 st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
             elif total_red > 0:
                 st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara.")
@@ -1565,16 +1578,7 @@ with tab_aviacion:
                     procesar_texto_tle_con_mapa("GLONASS", texto_glo, observador, lat_target, lon_target)
 
             with tab_gal:
-                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/galileo.txt)")
-                texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
-                if st.button("🚀 Procesar Datos Galileo y Generar Mapa", key="btn_gal_man"):
-                    procesar_texto_tle_con_mapa("Galileo", texto_gal, observador, lat_target, lon_target)
-
-        else:
-            st.error("Configura una ubicación válida arriba para desbloquear los paneles.")
-
-    except Exception as e:
-        st.error(f"Error crítico en el módulo: {e}")
+                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.
 
 
 
