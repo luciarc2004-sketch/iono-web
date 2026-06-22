@@ -1398,22 +1398,24 @@ with tab6:
 
 
 # =====================================================================
-# PESTAÑA: TRACKING SATELITAL GLOBAL (MAPA IONOSFÉRICO + ID DE TRACKING)
+# PESTAÑA: AVIACIÓN Y CLIMA ESPACIAL (HERRAMIENTA DUAL)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial")
+    
+    # =====================================================================
+    # SECCIÓN 1: FIABILIDAD DE SATÉLITES (TRACKING GNSS + MAPA TEC)
+    # =====================================================================
+    st.title("🛰️ Fiabilidad de Satélites (Tracking GNSS)")
     st.markdown("""
     Configura tu punto de observación y pega los datos orbitales (TLE). El sistema calculará la línea 
-    de vista de los satélites y los proyectará sobre el mapa global de Contenido Total de Electrones (TEC) en tiempo real.
+    de vista de los satélites y los proyectará sobre el mapa global de Contenido Total de Electrones (TEC).
     """)
     st.divider()
 
-    # Inicialización segura de herramientas astronómicas de Skyfield
     @st.cache_resource
     def inicializar_skyfield():
         return load.timescale()
 
-    # Función segura para obtener solo la matriz global de TECU para el fondo del mapa
     @st.cache_data(ttl=900)
     def obtener_fondo_tecu_global():
         try:
@@ -1430,9 +1432,6 @@ with tab_aviacion:
         ts = inicializar_skyfield()
         tiempo_actual = ts.now()
 
-        # -----------------------------------------------------------------
-        # 1. PARÁMETROS GLOBALES (UBICACIÓN Y RESOLUCIÓN)
-        # -----------------------------------------------------------------
         st.subheader("📍 1. Configuración del Observador")
         tipo_posicionamiento = st.radio(
             "Selecciona el método de ubicación:", 
@@ -1446,7 +1445,7 @@ with tab_aviacion:
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
             ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_man")
             if ciudad_usuario:
-                # Se asume que geocodificar_localidad ya está definida en tu app principal
+                # Usa la función global que ya tenías definida en tu app para sacar las coordenadas
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
@@ -1456,9 +1455,6 @@ with tab_aviacion:
 
         angulo_mascara = st.slider("Resolución / Ángulo de máscara de seguridad (°):", 0.0, 20.0, 5.0, step=0.5, key="sld_mascara_man")
 
-        # -----------------------------------------------------------------
-        # 2. MOTOR DE PROCESAMIENTO ORBITAL Y RENDERIZADO DEL MAPA
-        # -----------------------------------------------------------------
         def procesar_texto_tle_con_mapa(nombre_red, texto_tle_crudo, observador_topos, lat_obs, lon_obs):
             if not texto_tle_crudo.strip():
                 st.warning("El cuadro de texto está vacío. Pega los datos TLE antes de escanear.")
@@ -1467,8 +1463,6 @@ with tab_aviacion:
             tle_lines = [line.strip() for line in texto_tle_crudo.strip().split('\n') if line.strip()]
             total_red, linea_vista_teorica, linea_vista_segura = 0, 0, 0
             tabla_resultados = []
-            
-            # --- AQUÍ INICIAMOS EL CONTADOR DE ID ---
             id_satelite = 1  
             
             for i in range(0, len(tle_lines), 3):
@@ -1493,7 +1487,6 @@ with tab_aviacion:
                         linea_vista_segura += 1
                         subpoint = satelite.at(tiempo_actual).subpoint()
                         
-                        # --- AQUÍ GUARDAMOS EL ID EN LA TABLA ---
                         tabla_resultados.append({
                             "ID": id_satelite,
                             "Satélite": nombre_sat,
@@ -1503,11 +1496,10 @@ with tab_aviacion:
                             "Elevación (°)": round(alt.degrees, 2),
                             "Azimut (°)": round(az.degrees, 1)
                         })
-                        id_satelite += 1  # Sumamos 1 para el siguiente satélite
+                        id_satelite += 1
                 except Exception:
                     continue
 
-            # MÉTTRICAS VISUALES
             st.divider()
             c1, c2, c3 = st.columns(3)
             c1.metric("Satélites en Lista TLE", total_red)
@@ -1517,14 +1509,12 @@ with tab_aviacion:
             if tabla_resultados:
                 st.success(f"✅ Análisis completado. Se detectaron **{linea_vista_segura}** satélites en línea de vista para {nombre_red}.")
                 
-                # --- CREACIÓN DEL MAPA COMBINADO ---
                 fig, ax = plt.subplots(figsize=(14, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
                 ax.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
                 ax.add_feature(cfeature.LAND, facecolor='#f5f5f5')
                 ax.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
                 ax.add_feature(cfeature.COASTLINE, edgecolor='#444444', linewidth=0.8)
 
-                # Capa 1: Fondo Ionosférico (TECU)
                 matriz_tecu = obtener_fondo_tecu_global()
                 if matriz_tecu is not None:
                     lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
@@ -1532,15 +1522,12 @@ with tab_aviacion:
                     mapa_calor = ax.pcolormesh(grid_lon, grid_lat, matriz_tecu, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.6, shading='gouraud')
                     fig.colorbar(mapa_calor, ax=ax, orientation='vertical', pad=0.02, shrink=0.7).set_label('TECU Global', weight='bold')
                 
-                # Capa 2: Punto Blanco del Observador
                 ax.scatter(lon_obs, lat_obs, color='white', edgecolor='red', marker='*', s=350, transform=ccrs.PlateCarree(), zorder=6, label='Observador (Tú)')
                 
-                # Capa 3: Puntos Negros de los Satélites
                 lats_sats = [s["Lat (°N)"] for s in tabla_resultados]
                 lons_sats = [s["Lon (°E)"] for s in tabla_resultados]
                 ax.scatter(lons_sats, lats_sats, color='black', edgecolor='white', s=60, transform=ccrs.PlateCarree(), zorder=5, label='Satélites en Vista')
                 
-                # --- CAPA 4: TEXTO NUMÉRICO (ID) SOBRE EL MAPA ---
                 for sat in tabla_resultados:
                     ax.text(sat["Lon (°E)"] + 2, sat["Lat (°N)"] + 2, str(sat["ID"]), 
                             color='black', fontsize=9, weight='bold', 
@@ -1552,18 +1539,13 @@ with tab_aviacion:
                 
                 st.pyplot(fig)
                 plt.close(fig)
-                # -----------------------------------
 
-                # --- MOSTRAR LA TABLA CON EL ID INCLUIDO ---
                 st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
             elif total_red > 0:
                 st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara.")
             else:
                 st.error("No se pudo reconocer ningún formato TLE válido.")
 
-        # -----------------------------------------------------------------
-        # 3. APARTADOS DE CONSTELACIONES
-        # -----------------------------------------------------------------
         if lat_target is not None and lon_target is not None:
             st.success(f"✅ **Observatorio configurado en:** {label_ubicacion} ({lat_target:.4f}°, {lon_target:.4f}°)")
             observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
@@ -1588,218 +1570,198 @@ with tab_aviacion:
                 texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
                 if st.button("🚀 Procesar Datos Galileo y Generar Mapa", key="btn_gal_man"):
                     procesar_texto_tle_con_mapa("Galileo", texto_gal, observador, lat_target, lon_target)
-
         else:
             st.error("Configura una ubicación válida arriba para desbloquear los paneles.")
 
     except Exception as e:
-        st.error(f"Error crítico en el módulo: {e}")
+        st.error(f"Error crítico en el módulo de Fiabilidad: {e}")
 
+    # =====================================================================
+    # SECCIÓN 2: CERTIFICADO IONOSFÉRICO DE VUELO
+    # =====================================================================
+    st.write("\n" * 3) # Espacio en blanco
+    st.divider()
+    st.title("📜 Certificado Ionosférico de Vuelo")
+    st.markdown("""
+    Simula la trayectoria ortodrómica de una aeronave y cruza sus coordenadas espaciotemporales 
+    con los mapas de la ionosfera. Obtén un perfil del Contenido Total de Electrones (TEC) que 
+    experimentará el vuelo a lo largo de su ruta.
+    """)
+    
+    # Limites geográficos de la malla Europa DLR
+    C_LAT_MIN, C_LAT_MAX, C_DELTA_LAT = 30, 72, 1
+    C_LON_MIN, C_LON_MAX, C_DELTA_LON = -30, 50, 1
 
-# =====================================================================
-        # =====================================================================
-        # SECCIÓN 2: CERTIFICADO IONOSFÉRICO DE VUELO
-        # =====================================================================
-        # =====================================================================
-        st.divider()
-        st.header("📜 Certificado Ionosférico de Vuelo")
-        st.markdown("""
-        Simula la trayectoria ortodrómica de una aeronave y cruza sus coordenadas espaciotemporales 
-        con los mapas de la ionosfera. Obtén un perfil del Contenido Total de Electrones (TEC) que 
-        experimentará el vuelo a lo largo de su ruta.
-        """)
-        
-        # Limites geográficos de la malla Europa DLR para validar las rutas
-        C_LAT_MIN, C_LAT_MAX, C_DELTA_LAT = 30, 72, 1
-        C_LON_MIN, C_LON_MAX, C_DELTA_LON = -30, 50, 1
+    st.subheader("🛫 Plan de Vuelo")
+    col_v1, col_v2 = st.columns(2)
+    origen_vuelo = col_v1.text_input("Origen (Ciudad o 'Lat,Lon'):", "Madrid", key="in_origen")
+    destino_vuelo = col_v2.text_input("Destino (Ciudad o 'Lat,Lon'):", "Helsinki", key="in_destino")
+    
+    col_v3, col_v4, col_v5 = st.columns(3)
+    fecha_vuelo = col_v3.date_input("Fecha de Salida:", datetime.date.today(), help="Usa fechas recientes (máx. 1 semana atrás).")
+    hora_vuelo = col_v4.time_input("Hora de Salida (UTC):", datetime.time(8, 0))
+    velocidad_nudos = col_v5.number_input("Velocidad Crucero (nudos):", min_value=100, max_value=1000, value=450, step=10)
 
-        # 1. Interfaz de Configuración del Vuelo
-        st.subheader("🛫 Plan de Vuelo")
-        
-        col_v1, col_v2 = st.columns(2)
-        origen_vuelo = col_v1.text_input("Origen (Ciudad o 'Lat,Lon'):", "Madrid, Spain", key="in_origen")
-        destino_vuelo = col_v2.text_input("Destino (Ciudad o 'Lat,Lon'):", "Helsinki, Finland", key="in_destino")
-        
-        col_v3, col_v4, col_v5 = st.columns(3)
-        fecha_vuelo = col_v3.date_input("Fecha de Salida:", datetime.date.today(), help="Usa fechas recientes (los datos de tiempo real del DLR caducan a los pocos días).")
-        hora_vuelo = col_v4.time_input("Hora de Salida (UTC):", datetime.time(8, 0))
-        velocidad_nudos = col_v5.number_input("Velocidad Crucero (nudos):", min_value=100, max_value=1000, value=450, step=10)
-        
-        # 2. Funciones auxiliares encapsuladas
-        def obtener_coords_vuelo(punto_str):
-            try:
-                # Si el usuario mete "40.4, -3.7"
-                lat, lon = map(float, punto_str.split(','))
-                return lat, lon
-            except ValueError:
-                # Si el usuario mete "Madrid"
-                geolocator = Nominatim(user_agent="vtec_flight_tracker_app")
-                loc = geolocator.geocode(punto_str)
-                if loc:
-                    return loc.latitude, loc.longitude
-                return None, None
-
-        def generar_enlace_dlr_historico(fecha_busqueda):
-            str_anio = fecha_busqueda.strftime("%Y")
-            str_doy = fecha_busqueda.strftime("%j")
-            str_hora = fecha_busqueda.strftime("%H")
-
-            fecha_inicio = fecha_busqueda - datetime.timedelta(minutes=4, seconds=30)
-            timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
-            timestamp_fin = fecha_busqueda.strftime("%Y-%m-%dT%H-%M-%S")
-
-            base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-            nombre_archivo = f"DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
-            return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/{nombre_archivo}"
-
-        @st.cache_data(ttl=3600, show_spinner=False)
-        def descargar_malla_vuelo(fecha_obj):
-            headers = {"User-Agent": "Mozilla/5.0"}
-            minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
-            
-            min_base = 5 * round(fecha_obj.minute / 5)
-            if min_base == 60:
-                fecha_obj = fecha_obj + datetime.timedelta(hours=1)
-                min_base = 0
-                
-            if min_base in minutos_contiguos:
-                minutos_contiguos.remove(min_base)
-                minutos_contiguos.insert(0, min_base)
-
-            for m in minutos_contiguos:
-                fecha_intento = fecha_obj.replace(minute=m)
-                url = generar_enlace_dlr_historico(fecha_intento)
-                try:
-                    response = requests.get(url, headers=headers, timeout=5)
-                    if response.status_code == 200:
-                        data = response.json()
-                        vtec_list = []
-                        if 'data' in data and 'grid' in data['data']:
-                            for feature in data['data']['grid']['features']:
-                                vtec_list.append(feature['properties']['vtec_assimilated_tecu'])
-                        
-                        cols = len(np.arange(C_LON_MIN, C_LON_MAX + C_DELTA_LON, C_DELTA_LON))
-                        fils = len(np.arange(C_LAT_MIN, C_LAT_MAX + C_DELTA_LAT, C_DELTA_LAT))
-                        
-                        if len(vtec_list) == (fils * cols):
-                            return np.array(vtec_list).reshape(fils, cols), f"{fecha_intento.hour:02d}:{m:02d}"
-                except:
-                    continue
+    def obtener_coords_vuelo(punto_str):
+        try:
+            lat, lon = map(float, punto_str.split(','))
+            return lat, lon
+        except ValueError:
+            geolocator = Nominatim(user_agent="vtec_flight_tracker_app")
+            loc = geolocator.geocode(punto_str)
+            if loc:
+                return loc.latitude, loc.longitude
             return None, None
 
-        # 3. Procesamiento y Generación
-        if st.button("✈️ Generar Certificado de Vuelo", key="btn_certificado"):
-            lat_origen, lon_origen = obtener_coords_vuelo(origen_vuelo)
-            lat_destino, lon_destino = obtener_coords_vuelo(destino_vuelo)
+    def generar_enlace_dlr_historico(fecha_busqueda):
+        str_anio = fecha_busqueda.strftime("%Y")
+        str_doy = fecha_busqueda.strftime("%j")
+        str_hora = fecha_busqueda.strftime("%H")
+        fecha_inicio = fecha_busqueda - datetime.timedelta(minutes=4, seconds=30)
+        timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
+        timestamp_fin = fecha_busqueda.strftime("%Y-%m-%dT%H-%M-%S")
+        base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
+        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
 
-            if None in (lat_origen, lon_origen, lat_destino, lon_destino):
-                st.error("No se han podido geolocalizar el Origen o el Destino. Comprueba los nombres.")
-            else:
-                # Validar cuadrícula
-                ruta_valida = True
-                for l_lat, l_lon, nom in [(lat_origen, lon_origen, "Origen"), (lat_destino, lon_destino, "Destino")]:
-                    if not (C_LAT_MIN <= l_lat <= C_LAT_MAX) or not (C_LON_MIN <= l_lon <= C_LON_MAX):
-                        st.error(f"¡Error! El {nom} ({l_lat:.2f}, {l_lon:.2f}) se sale de la cuadrícula TECU de Europa permitida por el DLR.")
-                        ruta_valida = False
-                
-                if ruta_valida:
-                    with st.spinner("Calculando ortodrómica y descargando datos ionosféricos (esto puede tardar unos segundos)..."):
-                        # Cálculos matemáticos de ruta
-                        dist_km = great_circle((lat_origen, lon_origen), (lat_destino, lon_destino)).kilometers
-                        dist_nm = dist_km * 0.539957
-                        horas_totales = dist_nm / velocidad_nudos
-                        intervalo_minutos = 20
-                        num_pasos = max(2, int((horas_totales * 60) / intervalo_minutos) + 2)
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def descargar_malla_vuelo(fecha_obj):
+        headers = {"User-Agent": "Mozilla/5.0"}
+        minutos_contiguos = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+        min_base = 5 * round(fecha_obj.minute / 5)
+        if min_base == 60:
+            fecha_obj = fecha_obj + datetime.timedelta(hours=1)
+            min_base = 0
+            
+        if min_base in minutos_contiguos:
+            minutos_contiguos.remove(min_base)
+            minutos_contiguos.insert(0, min_base)
 
-                        st.success(f"**Ruta detectada:** {dist_km:.1f} km ({dist_nm:.1f} NM). **Tiempo de vuelo estimado:** {horas_totales:.2f} horas.")
+        for m in minutos_contiguos:
+            fecha_intento = fecha_obj.replace(minute=m)
+            url = generar_enlace_dlr_historico(fecha_intento)
+            try:
+                response = requests.get(url, headers=headers, timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    vtec_list = []
+                    if 'data' in data and 'grid' in data['data']:
+                        for feature in data['data']['grid']['features']:
+                            vtec_list.append(feature['properties']['vtec_assimilated_tecu'])
+                    
+                    cols = len(np.arange(C_LON_MIN, C_LON_MAX + C_DELTA_LON, C_DELTA_LON))
+                    fils = len(np.arange(C_LAT_MIN, C_LAT_MAX + C_DELTA_LAT, C_DELTA_LAT))
+                    
+                    if len(vtec_list) == (fils * cols):
+                        return np.array(vtec_list).reshape(fils, cols), f"{fecha_intento.hour:02d}:{m:02d}"
+            except:
+                continue
+        return None, None
 
-                        lat1, lon1, lat2, lon2 = map(np.radians, [lat_origen, lon_origen, lat_destino, lon_destino])
-                        d_angular = np.arccos(np.clip(np.sin(lat1)*np.sin(lat2) + np.cos(lat1)*np.cos(lat2)*np.cos(lon2 - lon1), -1.0, 1.0))
+    if st.button("✈️ Generar Certificado de Vuelo", key="btn_certificado"):
+        lat_origen, lon_origen = obtener_coords_vuelo(origen_vuelo)
+        lat_destino, lon_destino = obtener_coords_vuelo(destino_vuelo)
 
-                        posiciones_vuelo = []
-                        fecha_inicial = datetime.datetime.combine(fecha_vuelo, hora_vuelo)
+        if None in (lat_origen, lon_origen, lat_destino, lon_destino):
+            st.error("No se han podido geolocalizar el Origen o el Destino. Comprueba los nombres.")
+        else:
+            ruta_valida = True
+            for l_lat, l_lon, nom in [(lat_origen, lon_origen, "Origen"), (lat_destino, lon_destino, "Destino")]:
+                if not (C_LAT_MIN <= l_lat <= C_LAT_MAX) or not (C_LON_MIN <= l_lon <= C_LON_MAX):
+                    st.error(f"¡Error! El {nom} ({l_lat:.2f}, {l_lon:.2f}) se sale de la cuadrícula de Europa (Lat: 30 a 72, Lon: -30 a 50).")
+                    ruta_valida = False
+            
+            if ruta_valida:
+                with st.spinner("Calculando ortodrómica y cruzando con datos del DLR..."):
+                    dist_km = great_circle((lat_origen, lon_origen), (lat_destino, lon_destino)).kilometers
+                    dist_nm = dist_km * 0.539957
+                    horas_totales = dist_nm / velocidad_nudos
+                    intervalo_minutos = 20
+                    num_pasos = max(2, int((horas_totales * 60) / intervalo_minutos) + 2)
 
-                        for idx, f in enumerate(np.linspace(0, 1, num_pasos)):
-                            A = np.sin((1 - f) * d_angular) / np.sin(d_angular)
-                            B = np.sin(f * d_angular) / np.sin(d_angular)
-                            x = A * np.cos(lat1) * np.cos(lon1) + B * np.cos(lat2) * np.cos(lon2)
-                            y = A * np.cos(lat1) * np.sin(lon1) + B * np.cos(lat2) * np.sin(lon2)
-                            z = A * np.sin(lat1) + B * np.sin(lat2)
-                            p_lat = np.degrees(np.arctan2(z, np.sqrt(x**2 + y**2)))
-                            p_lon = np.degrees(np.arctan2(y, x))
+                    st.success(f"**Ruta válida:** {dist_km:.1f} km ({dist_nm:.1f} NM). **Tiempo estimado:** {horas_totales:.2f} horas.")
+
+                    lat1, lon1, lat2, lon2 = map(np.radians, [lat_origen, lon_origen, lat_destino, lon_destino])
+                    d_angular = np.arccos(np.clip(np.sin(lat1)*np.sin(lat2) + np.cos(lat1)*np.cos(lat2)*np.cos(lon2 - lon1), -1.0, 1.0))
+
+                    posiciones_vuelo = []
+                    fecha_inicial = datetime.datetime.combine(fecha_vuelo, hora_vuelo)
+
+                    for idx, f in enumerate(np.linspace(0, 1, num_pasos)):
+                        A = np.sin((1 - f) * d_angular) / np.sin(d_angular)
+                        B = np.sin(f * d_angular) / np.sin(d_angular)
+                        x = A * np.cos(lat1) * np.cos(lon1) + B * np.cos(lat2) * np.cos(lon2)
+                        y = A * np.cos(lat1) * np.sin(lon1) + B * np.cos(lat2) * np.sin(lon2)
+                        z = A * np.sin(lat1) + B * np.sin(lat2)
+                        p_lat = np.degrees(np.arctan2(z, np.sqrt(x**2 + y**2)))
+                        p_lon = np.degrees(np.arctan2(y, x))
+                        
+                        tiempo_paso = fecha_inicial + datetime.timedelta(minutes=idx * intervalo_minutos)
+                        if idx == num_pasos - 1:
+                            tiempo_paso = fecha_inicial + datetime.timedelta(hours=horas_totales)
                             
-                            tiempo_paso = fecha_inicial + datetime.timedelta(minutes=idx * intervalo_minutos)
-                            if idx == num_pasos - 1:
-                                tiempo_paso = fecha_inicial + datetime.timedelta(hours=horas_totales)
-                                
-                            posiciones_vuelo.append({"lat": p_lat, "lon": p_lon, "tiempo": tiempo_paso, "tecu": 0.0, "valido": False})
+                        posiciones_vuelo.append({"lat": p_lat, "lon": p_lon, "tiempo": tiempo_paso, "tecu": 0.0, "valido": False})
 
-                        # Extracción TECU
-                        vect_lats = np.arange(C_LAT_MIN, C_LAT_MAX + C_DELTA_LAT, C_DELTA_LAT)
-                        vect_lons = np.arange(C_LON_MIN, C_LON_MAX + C_DELTA_LON, C_DELTA_LON)
-                        
-                        barra_progreso = st.progress(0)
-                        for i, pos in enumerate(posiciones_vuelo):
-                            malla, _ = descargar_malla_vuelo(pos["tiempo"])
-                            if malla is not None:
-                                idx_lat = (np.abs(vect_lats - pos["lat"])).argmin()
-                                idx_lon = (np.abs(vect_lons - pos["lon"])).argmin()
-                                pos["tecu"] = malla[idx_lat, idx_lon]
-                                pos["valido"] = True
-                            barra_progreso.progress((i + 1) / len(posiciones_vuelo))
-                        
-                        # Filtrar datos válidos
-                        pos_validas = [p for p in posiciones_vuelo if p["valido"]]
-                        
-                        if len(pos_validas) < 2:
-                            st.error("No se encontraron datos ionosféricos en el servidor DLR para esta fecha/hora. Intenta con una fecha más reciente.")
-                        else:
-                            # Preparar datos para pintar
-                            lats_ruta = [p["lat"] for p in pos_validas]
-                            lons_ruta = [p["lon"] for p in pos_validas]
-                            tecus_ruta = [p["tecu"] for p in pos_validas]
-                            tiempos_str = [p["tiempo"].strftime("%H:%M") for p in pos_validas]
+                    vect_lats = np.arange(C_LAT_MIN, C_LAT_MAX + C_DELTA_LAT, C_DELTA_LAT)
+                    vect_lons = np.arange(C_LON_MIN, C_LON_MAX + C_DELTA_LON, C_DELTA_LON)
+                    
+                    barra_progreso = st.progress(0)
+                    for i, pos in enumerate(posiciones_vuelo):
+                        malla, _ = descargar_malla_vuelo(pos["tiempo"])
+                        if malla is not None:
+                            idx_lat = (np.abs(vect_lats - pos["lat"])).argmin()
+                            idx_lon = (np.abs(vect_lons - pos["lon"])).argmin()
+                            pos["tecu"] = malla[idx_lat, idx_lon]
+                            pos["valido"] = True
+                        barra_progreso.progress((i + 1) / len(posiciones_vuelo))
+                    
+                    pos_validas = [p for p in posiciones_vuelo if p["valido"]]
+                    
+                    if len(pos_validas) < 2:
+                        st.error("❌ No se han encontrado datos ionosféricos en el servidor DLR para las coordenadas y fecha establecidas. Prueba con una fecha más reciente o comprueba tu conexión.")
+                    else:
+                        lats_ruta = [p["lat"] for p in pos_validas]
+                        lons_ruta = [p["lon"] for p in pos_validas]
+                        tecus_ruta = [p["tecu"] for p in pos_validas]
+                        tiempos_str = [p["tiempo"].strftime("%H:%M") for p in pos_validas]
 
-                            st.divider()
-                            st.subheader("📊 Reporte de Navegación")
+                        st.divider()
+                        st.subheader("📊 Reporte de Navegación")
 
-                            # --- GRÁFICA 1: MAPA ORTODRÓMICO ---
-                            fig1, ax1 = plt.subplots(figsize=(12, 6), subplot_kw={'projection': ccrs.PlateCarree()})
-                            ax1.set_extent([C_LON_MIN, C_LON_MAX, C_LAT_MIN, C_LAT_MAX], crs=ccrs.PlateCarree())
+                        # MAPA 1
+                        fig1, ax1 = plt.subplots(figsize=(12, 6), subplot_kw={'projection': ccrs.PlateCarree()})
+                        ax1.set_extent([C_LON_MIN, C_LON_MAX, C_LAT_MIN, C_LAT_MAX], crs=ccrs.PlateCarree())
 
-                            ax1.add_feature(cfeature.LAND, facecolor='#eaeaea')
-                            ax1.add_feature(cfeature.OCEAN, facecolor='#d9effb')
-                            ax1.add_feature(cfeature.COASTLINE, edgecolor='#333333', linewidth=1)
-                            ax1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#777777')
+                        ax1.add_feature(cfeature.LAND, facecolor='#eaeaea')
+                        ax1.add_feature(cfeature.OCEAN, facecolor='#d9effb')
+                        ax1.add_feature(cfeature.COASTLINE, edgecolor='#333333', linewidth=1)
+                        ax1.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='#777777')
 
-                            ax1.plot(lons_ruta, lats_ruta, color='red', linewidth=2.5, marker='o', label='Trayectoria del Avión', transform=ccrs.PlateCarree())
+                        ax1.plot(lons_ruta, lats_ruta, color='red', linewidth=2.5, marker='o', label='Trayectoria del Avión', transform=ccrs.PlateCarree())
 
-                            for p in pos_validas[::2]:
-                                ax1.text(p["lon"] + 0.5, p["lat"] + 0.5, p["tiempo"].strftime("%H:%M"), fontsize=8, weight='bold', transform=ccrs.PlateCarree())
+                        for p in pos_validas[::2]:
+                            ax1.text(p["lon"] + 0.5, p["lat"] + 0.5, p["tiempo"].strftime("%H:%M"), fontsize=8, weight='bold', transform=ccrs.PlateCarree())
 
-                            gl = ax1.gridlines(draw_labels=True, linestyle='--', color='gray', alpha=0.3)
-                            gl.top_labels, gl.right_labels = False, False
-                            gl.xformatter, gl.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+                        gl = ax1.gridlines(draw_labels=True, linestyle='--', color='gray', alpha=0.3)
+                        gl.top_labels, gl.right_labels = False, False
+                        gl.xformatter, gl.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
-                            ax1.set_title(f"Ruta Ortodrómica: {origen_vuelo} ➔ {destino_vuelo}", fontsize=11, weight='bold')
-                            ax1.legend(loc='lower left')
-                            st.pyplot(fig1)
-                            plt.close(fig1)
+                        ax1.set_title(f"Ruta Ortodrómica: {origen_vuelo} ➔ {destino_vuelo}", fontsize=11, weight='bold')
+                        ax1.legend(loc='lower left')
+                        st.pyplot(fig1)
+                        plt.close(fig1)
 
-                            # --- GRÁFICA 2: PERFIL TECU ---
-                            fig2, ax2 = plt.subplots(figsize=(10, 4.5))
-                            ax2.plot(tiempos_str, tecus_ruta, marker='s', color='#d32f2f', linewidth=2, label='TECU experimentado')
-                            ax2.fill_between(tiempos_str, tecus_ruta, color='#d32f2f', alpha=0.1)
-                            ax2.grid(True, linestyle=':', alpha=0.6)
-                            ax2.set_xlabel("Progreso del Tiempo de Vuelo (Hora UTC)", fontsize=10, weight='bold')
-                            ax2.set_ylabel("TECU", fontsize=10, weight='bold')
-                            ax2.set_title("Perfil Dinámico de Radiación Ionosférica (TEC)", fontsize=11, weight='bold')
-                            ax2.set_ylim(0, max(tecus_ruta) + 5 if tecus_ruta else 30)
-                            ax2.legend()
-                            fig2.tight_layout()
-                            st.pyplot(fig2)
-                            plt.close(fig2)
-
-
+                        # GRÁFICA 2
+                        fig2, ax2 = plt.subplots(figsize=(10, 4.5))
+                        ax2.plot(tiempos_str, tecus_ruta, marker='s', color='#d32f2f', linewidth=2, label='TECU experimentado')
+                        ax2.fill_between(tiempos_str, tecus_ruta, color='#d32f2f', alpha=0.1)
+                        ax2.grid(True, linestyle=':', alpha=0.6)
+                        ax2.set_xlabel("Progreso del Tiempo de Vuelo (Hora UTC)", fontsize=10, weight='bold')
+                        ax2.set_ylabel("TECU", fontsize=10, weight='bold')
+                        ax2.set_title("Perfil Dinámico de Radiación Ionosférica (TEC)", fontsize=11, weight='bold')
+                        ax2.set_ylim(0, max(tecus_ruta) + 5 if tecus_ruta else 30)
+                        ax2.legend()
+                        fig2.tight_layout()
+                        st.pyplot(fig2)
+                        plt.close(fig2)
 
 
