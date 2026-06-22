@@ -1406,11 +1406,11 @@ with tab_aviacion:
     """)
     st.divider()
 
-# 1. Configuración de URLs protegidas para el Proxy (Reemplazando '&' por '%26')
+# 1. Configuración de URLs usando archivos estáticos puros (.txt) a través de proxy seguro
     GNSS_URLS = {
-        "GPS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops%26FORMAT=TLE",
-        "GLONASS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops%26FORMAT=TLE",
-        "Galileo": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo%26FORMAT=TLE"
+        "GPS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gps-ops.txt",
+        "GLONASS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/glo-ops.txt",
+        "Galileo": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/galileo.txt"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
@@ -1461,19 +1461,19 @@ with tab_aviacion:
                 st.divider()
                 st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
                 
-                for nombre_grupo, url in GNSS_URLS.items():
+for nombre_grupo, url in GNSS_URLS.items():
                     with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
                         try:
-                            # User-Agent estándar y tiempo de espera de 20 segundos
-                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                            # User-Agent completo para evitar bloqueos
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
                             response = requests.get(url, headers=headers, timeout=20)
                             
-                            # Si no devuelve un 200 (Éxito), mostramos el código exacto del error
                             if response.status_code != 200:
-                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}. Código de estado: {response.status_code}")
+                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}. Código: {response.status_code}")
                                 continue
                                 
                             tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
+                            
                             total_red = 0
                             linea_vista_teorica = 0
                             linea_vista_segura = 0
