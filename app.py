@@ -1406,11 +1406,12 @@ with tab_aviacion:
     """)
     st.divider()
 
-    # 1. Configuración de URLs de CelesTrak (Constelaciones de navegación operacionales)
+# 1. Configuración de URLs usando un proxy público (AllOrigins) para saltar el cortafuegos de CelesTrak
+    # Nota: El símbolo '&' se cambia por '%26' para que el proxy lea la URL completa correctamente.
     GNSS_URLS = {
-        "GPS": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
-        "GLONASS": "https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
-        "Galileo": "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
+        "GPS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops%26FORMAT=TLE",
+        "GLONASS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops%26FORMAT=TLE",
+        "Galileo": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo%26FORMAT=TLE"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
