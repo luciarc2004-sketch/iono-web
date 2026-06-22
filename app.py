@@ -1393,14 +1393,15 @@ with tab6:
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
 
+
 # =====================================================================
-# PESTAÑA: TRACKING SATELITAL GLOBAL (SISTEMA DE DATOS MANUALES TLE)
+# PESTAÑA: TRACKING SATELITAL GLOBAL (CON MAPA IONOSFÉRICO INTEGRADO)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola de Tracking GNSS (Modo TLE Manual)")
+    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial")
     st.markdown("""
-    Configura tu punto de observación y pega los datos orbitales crudos (formato TLE) de las constelaciones 
-    para calcular la geometría y visibilidad satelital al instante, sin depender de conexiones externas.
+    Configura tu punto de observación y pega los datos orbitales (TLE). El sistema calculará la línea 
+    de vista de los satélites y los proyectará sobre el mapa global de Contenido Total de Electrones (TEC) en tiempo real.
     """)
     st.divider()
 
@@ -1408,6 +1409,19 @@ with tab_aviacion:
     @st.cache_resource
     def inicializar_skyfield():
         return load.timescale()
+
+    # Función segura para obtener solo la matriz global de TECU para el fondo del mapa
+    @st.cache_data(ttl=900)
+    def obtener_fondo_tecu_global():
+        try:
+            url_global = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL/v2.0.0/latest/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_GLOBAL_latest_D.json"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            res = requests.get(url_global, headers=headers, timeout=15)
+            res.raise_for_status()
+            matriz = np.array([f['properties']['vtec_assimilated_tecu'] for f in res.json()['data']['grid']['features']]).reshape(73, 73)
+            return matriz
+        except:
+            return None
 
     try:
         ts = inicializar_skyfield()
@@ -1439,30 +1453,23 @@ with tab_aviacion:
         angulo_mascara = st.slider("Resolución / Ángulo de máscara de seguridad (°):", 0.0, 20.0, 5.0, step=0.5, key="sld_mascara_man")
 
         # -----------------------------------------------------------------
-        # 2. MOTOR DE PROCESAMIENTO ORBITAL (LECTURA DE TEXTO)
+        # 2. MOTOR DE PROCESAMIENTO ORBITAL Y RENDERIZADO DEL MAPA
         # -----------------------------------------------------------------
-        def procesar_texto_tle(nombre_red, texto_tle_crudo, observador_topos):
+        def procesar_texto_tle_con_mapa(nombre_red, texto_tle_crudo, observador_topos, lat_obs, lon_obs):
             if not texto_tle_crudo.strip():
                 st.warning("El cuadro de texto está vacío. Pega los datos TLE antes de escanear.")
                 return
 
-            # Separar el texto pegado en líneas, quitando espacios en blanco extra
             tle_lines = [line.strip() for line in texto_tle_crudo.strip().split('\n') if line.strip()]
-            
-            total_red = 0
-            linea_vista_teorica = 0
-            linea_vista_segura = 0
+            total_red, linea_vista_teorica, linea_vista_segura = 0, 0, 0
             tabla_resultados = []
             
-            # Leer el bloque TLE de 3 en 3 líneas (Nombre, Línea 1, Línea 2)
             for i in range(0, len(tle_lines), 3):
                 if i + 2 >= len(tle_lines): break
                     
                 nombre_sat = tle_lines[i]
-                linea1 = tle_lines[i+1]
-                linea2 = tle_lines[i+2]
+                linea1, linea2 = tle_lines[i+1], tle_lines[i+2]
                 
-                # Validación básica para asegurar que son líneas TLE correctas
                 if not (linea1.startswith('1 ') and linea2.startswith('2 ')): continue
                     
                 total_red += 1
@@ -1477,7 +1484,6 @@ with tab_aviacion:
                         
                     if alt.degrees >= angulo_mascara:
                         linea_vista_segura += 1
-                        
                         subpoint = satelite.at(tiempo_actual).subpoint()
                         tabla_resultados.append({
                             "Satélite": nombre_sat,
@@ -1490,7 +1496,7 @@ with tab_aviacion:
                 except Exception:
                     continue
 
-            # Renderizado visual de los resultados
+            # MÉTTRICAS VISUALES
             st.divider()
             c1, c2, c3 = st.columns(3)
             c1.metric("Satélites en Lista TLE", total_red)
@@ -1498,48 +1504,74 @@ with tab_aviacion:
             c3.metric(f"Enlace Seguro (>={angulo_mascara}°)", linea_vista_segura)
             
             if tabla_resultados:
-                st.success(f"✅ Análisis completado instantáneamente. Se detectaron **{linea_vista_segura}** satélites operacionales para {nombre_red}.")
+                st.success(f"✅ Análisis completado. Se detectaron **{linea_vista_segura}** satélites en línea de vista para {nombre_red}.")
+                
+                # --- CREACIÓN DEL MAPA COMBINADO ---
+                fig, ax = plt.subplots(figsize=(14, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+                ax.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+                ax.add_feature(cfeature.LAND, facecolor='#f5f5f5')
+                ax.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
+                ax.add_feature(cfeature.COASTLINE, edgecolor='#444444', linewidth=0.8)
+
+                # Capa 1: Fondo Ionosférico (TECU)
+                matriz_tecu = obtener_fondo_tecu_global()
+                if matriz_tecu is not None:
+                    lons_glb, lats_glb = np.linspace(-180, 180, 73), np.linspace(-90, 90, 73)
+                    grid_lon, grid_lat = np.meshgrid(lons_glb, lats_glb)
+                    mapa_calor = ax.pcolormesh(grid_lon, grid_lat, matriz_tecu, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.6, shading='gouraud')
+                    fig.colorbar(mapa_calor, ax=ax, orientation='vertical', pad=0.02, shrink=0.7).set_label('TECU Global', weight='bold')
+                
+                # Capa 2: Punto Blanco del Observador
+                ax.scatter(lon_obs, lat_obs, color='white', edgecolor='red', marker='*', s=350, transform=ccrs.PlateCarree(), zorder=6, label='Observador (Tú)')
+                
+                # Capa 3: Puntos Negros de los Satélites
+                lats_sats = [s["Lat (°N)"] for s in tabla_resultados]
+                lons_sats = [s["Lon (°E)"] for s in tabla_resultados]
+                ax.scatter(lons_sats, lats_sats, color='black', edgecolor='white', s=60, transform=ccrs.PlateCarree(), zorder=5, label='Satélites en Vista')
+                
+                ax.legend(loc='lower left', framealpha=0.9)
+                plt.title(f"Cobertura Espacial de {nombre_red} sobre Mapa TECU Global", weight='bold', fontsize=12)
+                
+                st.pyplot(fig)
+                plt.close(fig)
+                # -----------------------------------
+
                 st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
             elif total_red > 0:
-                st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara especificado sobre tus coordenadas.")
+                st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara.")
             else:
-                st.error("No se pudo reconocer ningún formato TLE válido en el texto proporcionado.")
+                st.error("No se pudo reconocer ningún formato TLE válido.")
 
         # -----------------------------------------------------------------
-        # 3. APARTADOS DE CONSTELACIONES (CAJAS DE TEXTO)
+        # 3. APARTADOS DE CONSTELACIONES
         # -----------------------------------------------------------------
         if lat_target is not None and lon_target is not None:
             st.success(f"✅ **Observatorio configurado en:** {label_ubicacion} ({lat_target:.4f}°, {lon_target:.4f}°)")
             observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
             
             st.subheader("📡 2. Introducción de Datos Orbitales")
-            
-            # Crear las 3 pestañas internas
             tab_gps, tab_glo, tab_gal = st.tabs(["🇺🇸 Constelación GPS", "🇷🇺 Constelación GLONASS", "🇪🇺 Constelación Galileo"])
             
-            # --- APARTADO GPS ---
             with tab_gps:
                 st.info("Obtén los datos oficiales aquí: [CelesTrak GPS TLE](https://celestrak.org/NORAD/elements/gps-ops.txt)")
                 texto_gps = st.text_area("Pega aquí el bloque completo de texto TLE para GPS:", height=200, key="area_gps")
-                if st.button("🚀 Procesar Datos GPS", key="btn_gps_man"):
-                    procesar_texto_tle("GPS", texto_gps, observador)
+                if st.button("🚀 Procesar Datos GPS y Generar Mapa", key="btn_gps_man"):
+                    procesar_texto_tle_con_mapa("GPS", texto_gps, observador, lat_target, lon_target)
 
-            # --- APARTADO GLONASS ---
             with tab_glo:
                 st.info("Obtén los datos oficiales aquí: [CelesTrak GLONASS TLE](https://celestrak.org/NORAD/elements/glo-ops.txt)")
                 texto_glo = st.text_area("Pega aquí el bloque completo de texto TLE para GLONASS:", height=200, key="area_glo")
-                if st.button("🚀 Procesar Datos GLONASS", key="btn_glo_man"):
-                    procesar_texto_tle("GLONASS", texto_glo, observador)
+                if st.button("🚀 Procesar Datos GLONASS y Generar Mapa", key="btn_glo_man"):
+                    procesar_texto_tle_con_mapa("GLONASS", texto_glo, observador, lat_target, lon_target)
 
-            # --- APARTADO GALILEO ---
             with tab_gal:
                 st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/galileo.txt)")
                 texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
-                if st.button("🚀 Procesar Datos Galileo", key="btn_gal_man"):
-                    procesar_texto_tle("Galileo", texto_gal, observador)
+                if st.button("🚀 Procesar Datos Galileo y Generar Mapa", key="btn_gal_man"):
+                    procesar_texto_tle_con_mapa("Galileo", texto_gal, observador, lat_target, lon_target)
 
         else:
-            st.error("Configura una ubicación válida arriba para desbloquear los paneles de análisis.")
+            st.error("Configura una ubicación válida arriba para desbloquear los paneles.")
 
     except Exception as e:
         st.error(f"Error crítico en el módulo: {e}")
