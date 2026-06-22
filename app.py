@@ -1456,7 +1456,7 @@ with tab_aviacion:
             
             if st.button("📡 Iniciar Escaneo de Órbitas Terrestres", key="btn_scan_universal"):
                 resumen_metricas = {}
-                headers = {"User-Agent": "Mozilla/5.0"}
+                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
                 
                 st.divider()
                 st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
@@ -1464,7 +1464,7 @@ with tab_aviacion:
                 for nombre_grupo, url in GNSS_URLS.items():
                     with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
                         try:
-                            response = requests.get(url, headers=headers, timeout=10)
+                            response = requests.get(url, headers=headers, timeout=30)
                             if response.status_code != 200:
                                 st.error(f"Error de conexión con CelesTrak para {nombre_grupo}.")
                                 continue
