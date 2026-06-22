@@ -1406,11 +1406,11 @@ with tab_aviacion:
     """)
     st.divider()
 
-# 1. Configuración de URLs usando el proxy CodeTabs (Muy estable para TLEs)
+# 1. Configuración de URLs protegidas para el Proxy (Reemplazando '&' por '%26')
     GNSS_URLS = {
-        "GPS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
-        "GLONASS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
-        "Galileo": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
+        "GPS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops%26FORMAT=TLE",
+        "GLONASS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops%26FORMAT=TLE",
+        "Galileo": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo%26FORMAT=TLE"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
