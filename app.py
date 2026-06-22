@@ -1394,7 +1394,170 @@ with tab6:
 
 
 
+# =====================================================================
+# PESTAÑA: TRACKING SATELITAL GLOBAL (CUALQUIER LOCALIDAD O COORDENADA)
+# =====================================================================
+with tab_aviacion:
+    st.title("🛰️ Consola Global de Disponibilidad y Tracking GNSS")
+    st.markdown("""
+    Analiza en tiempo real la geometría y visibilidad de las constelaciones **GPS, GLONASS y Galileo** 
+    sobre **cualquier punto del planeta**. Introduce una localidad o tus coordenadas exactas para 
+    calcular los satélites que cubren tu posición en este instante.
+    """)
+    st.divider()
 
+    # 1. Configuración de URLs de CelesTrak (Constelaciones de navegación operacionales)
+    GNSS_URLS = {
+        "GPS": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
+        "GLONASS": "https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
+        "Galileo": "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
+    }
+
+    # Inicialización segura de herramientas astronómicas de Skyfield
+    @st.cache_resource
+    def inicializar_skyfield():
+        return load.timescale()
+
+    try:
+        ts = inicializar_skyfield()
+        tiempo_actual = ts.now()
+
+        # 2. Interfaz de posicionamiento universal
+        st.subheader("📍 Definir Punto de Observación")
+        tipo_posicionamiento = st.radio(
+            "Selecciona el método de ubicación:", 
+            ["Buscar por localidad / ciudad", "Coordenadas manuales (Lat/Lon)"], 
+            horizontal=True, 
+            key="radio_tracking_universal"
+        )
+        
+        lat_target, lon_target, label_ubicacion = None, None, ""
+
+        if tipo_posicionamiento == "Buscar por localidad / ciudad":
+            ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_tracking")
+            if ciudad_usuario:
+                # Reutiliza tu función global de geocodificación
+                lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
+        else:
+            col_u1, col_u2 = st.columns(2)
+            lat_target = col_u1.number_input("Latitud (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_tracking")
+            lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_tracking")
+            label_ubicacion = f"Coordenadas {lat_target:.2f}°, {lon_target:.2f}°"
+
+        # Control del ángulo de máscara (satélites muy bajos en el horizonte sufren refracción ionosférica)
+        angulo_mascara = st.slider("Ángulo de máscara de seguridad horizonte (°):", 0.0, 15.0, 5.0, step=0.5, key="sld_mascara_tracking")
+
+        # 3. Procesamiento y cálculo orbital si la ubicación es válida
+        if lat_target is not None and lon_target is not None:
+            st.success(f"🎯 **Punto de Análisis Activo:** {label_ubicacion} | **Lat:** {lat_target:.4f}° | **Lon:** {lon_target:.4f}°")
+            
+            # Crear el objeto observador en la superficie terrestre para Skyfield
+            observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
+            
+            if st.button("📡 Iniciar Escaneo de Órbitas Terrestres", key="btn_scan_universal"):
+                resumen_metricas = {}
+                headers = {"User-Agent": "Mozilla/5.0"}
+                
+                st.divider()
+                st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
+                
+                for nombre_grupo, url in GNSS_URLS.items():
+                    with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
+                        try:
+                            response = requests.get(url, headers=headers, timeout=10)
+                            if response.status_code != 200:
+                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}.")
+                                continue
+                                
+                            tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
+                            
+                            total_red = 0
+                            linea_vista_teorica = 0
+                            linea_vista_segura = 0
+                            tabla_satelites_visibles = []
+                            
+                            # Procesar el bloque TLE de 3 en 3 líneas
+                            for i in range(0, len(tle_lines), 3):
+                                if i + 2 >= len(tle_lines): break
+                                    
+                                nombre_sat = tle_lines[i]
+                                linea1 = tle_lines[i+1]
+                                linea2 = tle_lines[i+2]
+                                
+                                if not (linea1.startswith('1 ') and linea2.startswith('2 ')): continue
+                                    
+                                total_red += 1
+                                
+                                try:
+                                    satelite = EarthSatellite(linea1, linea2, nombre_sat, ts)
+                                    diferencia = satelite - observador
+                                    topocentrico = diferencia.at(tiempo_actual)
+                                    alt, az, _ = topocentrico.altaz()
+                                    
+                                    if alt.degrees > 0:
+                                        linea_vista_teorica += 1
+                                        
+                                    if alt.degrees >= angulo_mascara:
+                                        linea_vista_segura += 1
+                                        
+                                        # Punto geométrico exacto debajo del satélite
+                                        geocentrico = satelite.at(tiempo_actual)
+                                        subpoint = geocentrico.subpoint()
+                                        
+                                        tabla_satelites_visibles.append({
+                                            "Satélite": nombre_sat,
+                                            "Latitud Subpt (°N)": round(subpoint.latitude.degrees, 2),
+                                            "Longitud Subpt (°E)": round(subpoint.longitude.degrees, 2),
+                                            "Altitud (km)": round(subpoint.elevation.km, 1),
+                                            "Elevación (° Alt)": round(alt.degrees, 2),
+                                            "Azimut (°)": round(az.degrees, 1)
+                                        })
+                                except Exception:
+                                    continue
+                                    
+                            resumen_metricas[nombre_grupo] = {
+                                "total": total_red,
+                                "teorico": linea_vista_teorica,
+                                "seguro": linea_vista_segura
+                            }
+                            
+                            # Desplegables de información detallada por constelación
+                            with st.expander(f"🛰️ Detalles {nombre_grupo} ({linea_vista_segura} Satélites Disponibles)"):
+                                if tabla_satelites_visibles:
+                                    st.dataframe(pd.DataFrame(tabla_satelites_visibles), use_container_width=True, hide_index=True)
+                                else:
+                                    st.info(f"No hay satélites de {nombre_grupo} sobre {angulo_mascara}° de elevación.")
+                                    
+                        except Exception as e:
+                            st.error(f"Fallo al procesar la red {nombre_grupo}: {e}")
+                
+                # 4. Tabla resumen comparativa global
+                st.divider()
+                st.subheader("📈 Resumen Ejecutivo de Cobertura Espacial")
+                
+                if resumen_metricas:
+                    columnas_resumen = []
+                    for red, datos in resumen_metricas.items():
+                        columnas_resumen.append({
+                            "Constelación GNSS": red,
+                            "Flota Activa en Órbita": datos["total"],
+                            "Vista Teórica (>0°)": datos["teorico"],
+                            f"Enlace Útil (=={angulo_mascara}°)": datos["seguro"]
+                        })
+                    
+                    st.table(pd.DataFrame(columnas_resumen))
+                    
+                    # Diagnóstico final automático de redundancia tridimensional
+                    satelites_totales = sum(d["seguro"] for d in resumen_metricas.values())
+                    if satelites_totales >= 4:
+                        st.success(f"✅ Triangulación óptima. {satelites_totales} satélites disponibles aseguran cálculos geométricos estables (cobertura GNSS multi-constelación garantizada).")
+                    else:
+                        st.warning(f"⚠️ Geometría deficiente. Solo {satelites_totales} satélites sobre el horizonte seguro. Riesgo alto de dilución de la precisión (DOP).")
+        else:
+            st.error("Por favor, introduce una localización o coordenadas válidas para iniciar los cálculos.")
+
+    except Exception as e:
+        st.error(f"Error general en el sistema de cálculo orbital: {e}")
 
 
 
