@@ -1393,11 +1393,13 @@ with tab6:
             )
             st.caption("Nota: Al hacer clic en el botón rojo, se abrirá tu aplicación de correo local (Gmail, Outlook...) para enviar la información de manera segura.")
 
+
+
 # =====================================================================
 # PESTAÑA: TRACKING SATELITAL GLOBAL (MAPA IONOSFÉRICO + ID DE TRACKING)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial") 
+    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial")
     st.markdown("""
     Configura tu punto de observación y pega los datos orbitales (TLE). El sistema calculará la línea 
     de vista de los satélites y los proyectará sobre el mapa global de Contenido Total de Electrones (TEC) en tiempo real.
@@ -1442,6 +1444,7 @@ with tab_aviacion:
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
             ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_man")
             if ciudad_usuario:
+                # Se asume que geocodificar_localidad ya está definida en tu app principal
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
@@ -1462,7 +1465,9 @@ with tab_aviacion:
             tle_lines = [line.strip() for line in texto_tle_crudo.strip().split('\n') if line.strip()]
             total_red, linea_vista_teorica, linea_vista_segura = 0, 0, 0
             tabla_resultados = []
-            id_satelite = 1  # Contador para asignar número a los visibles
+            
+            # --- AQUÍ INICIAMOS EL CONTADOR DE ID ---
+            id_satelite = 1  
             
             for i in range(0, len(tle_lines), 3):
                 if i + 2 >= len(tle_lines): break
@@ -1486,7 +1491,7 @@ with tab_aviacion:
                         linea_vista_segura += 1
                         subpoint = satelite.at(tiempo_actual).subpoint()
                         
-                        # Guardamos el ID junto con los datos
+                        # --- AQUÍ GUARDAMOS EL ID EN LA TABLA ---
                         tabla_resultados.append({
                             "ID": id_satelite,
                             "Satélite": nombre_sat,
@@ -1496,7 +1501,7 @@ with tab_aviacion:
                             "Elevación (°)": round(alt.degrees, 2),
                             "Azimut (°)": round(az.degrees, 1)
                         })
-                        id_satelite += 1
+                        id_satelite += 1  # Sumamos 1 para el siguiente satélite
                 except Exception:
                     continue
 
@@ -1533,9 +1538,8 @@ with tab_aviacion:
                 lons_sats = [s["Lon (°E)"] for s in tabla_resultados]
                 ax.scatter(lons_sats, lats_sats, color='black', edgecolor='white', s=60, transform=ccrs.PlateCarree(), zorder=5, label='Satélites en Vista')
                 
-                # Capa 4: Etiquetas numéricas (ID) junto a cada satélite
+                # --- CAPA 4: TEXTO NUMÉRICO (ID) SOBRE EL MAPA ---
                 for sat in tabla_resultados:
-                    # Añadimos un pequeño margen (+2 grados) para que el texto no tape el punto
                     ax.text(sat["Lon (°E)"] + 2, sat["Lat (°N)"] + 2, str(sat["ID"]), 
                             color='black', fontsize=9, weight='bold', 
                             bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.2'),
@@ -1548,7 +1552,7 @@ with tab_aviacion:
                 plt.close(fig)
                 # -----------------------------------
 
-                # Mostrar la tabla, ahora el ID será la primera columna visible
+                # --- MOSTRAR LA TABLA CON EL ID INCLUIDO ---
                 st.dataframe(pd.DataFrame(tabla_resultados), use_container_width=True, hide_index=True)
             elif total_red > 0:
                 st.warning(f"Se leyeron {total_red} satélites, pero ninguno supera el ángulo de máscara.")
@@ -1578,7 +1582,16 @@ with tab_aviacion:
                     procesar_texto_tle_con_mapa("GLONASS", texto_glo, observador, lat_target, lon_target)
 
             with tab_gal:
-                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.
+                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/galileo.txt)")
+                texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
+                if st.button("🚀 Procesar Datos Galileo y Generar Mapa", key="btn_gal_man"):
+                    procesar_texto_tle_con_mapa("Galileo", texto_gal, observador, lat_target, lon_target)
+
+        else:
+            st.error("Configura una ubicación válida arriba para desbloquear los paneles.")
+
+    except Exception as e:
+        st.error(f"Error crítico en el módulo: {e}")
 
 
 
