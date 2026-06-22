@@ -1406,12 +1406,11 @@ with tab_aviacion:
     """)
     st.divider()
 
-# 1. Configuración de URLs usando un proxy público (AllOrigins) para saltar el cortafuegos de CelesTrak
-    # Nota: El símbolo '&' se cambia por '%26' para que el proxy lea la URL completa correctamente.
+# 1. Configuración de URLs usando el proxy CodeTabs (Muy estable para TLEs)
     GNSS_URLS = {
-        "GPS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops%26FORMAT=TLE",
-        "GLONASS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops%26FORMAT=TLE",
-        "Galileo": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo%26FORMAT=TLE"
+        "GPS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
+        "GLONASS": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
+        "Galileo": "https://api.codetabs.com/v1/proxy?quest=https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
@@ -1465,13 +1464,16 @@ with tab_aviacion:
                 for nombre_grupo, url in GNSS_URLS.items():
                     with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
                         try:
-                            response = requests.get(url, headers=headers, timeout=30)
+                            # User-Agent estándar y tiempo de espera de 20 segundos
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                            response = requests.get(url, headers=headers, timeout=20)
+                            
+                            # Si no devuelve un 200 (Éxito), mostramos el código exacto del error
                             if response.status_code != 200:
-                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}.")
+                                st.error(f"Error de conexión con CelesTrak para {nombre_grupo}. Código de estado: {response.status_code}")
                                 continue
                                 
                             tle_lines = [line.strip() for line in response.text.strip().split('\n') if line.strip()]
-                            
                             total_red = 0
                             linea_vista_teorica = 0
                             linea_vista_segura = 0
