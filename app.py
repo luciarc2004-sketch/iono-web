@@ -1397,7 +1397,7 @@ with tab6:
 # PESTAÑA: TRACKING SATELITAL GLOBAL (MAPA IONOSFÉRICO + ID DE TRACKING)
 # =====================================================================
 with tab_aviacion:
-    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial")
+    st.title("🛰️ Consola de Tracking GNSS y Clima Espacial") 
     st.markdown("""
     Configura tu punto de observación y pega los datos orbitales (TLE). El sistema calculará la línea 
     de vista de los satélites y los proyectará sobre el mapa global de Contenido Total de Electrones (TEC) en tiempo real.
