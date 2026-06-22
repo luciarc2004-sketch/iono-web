@@ -1406,11 +1406,11 @@ with tab_aviacion:
     """)
     st.divider()
 
-# 1. Configuración de URLs usando archivos estáticos puros (.txt) a través de proxy seguro
+# 1. Configuración de URLs usando CorsProxy (Especializado en saltar bloqueos de Cloudflare)
     GNSS_URLS = {
-        "GPS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/gps-ops.txt",
-        "GLONASS": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/glo-ops.txt",
-        "Galileo": "https://api.allorigins.win/raw?url=https://celestrak.org/NORAD/elements/galileo.txt"
+        "GPS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gps-ops.txt",
+        "GLONASS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/glo-ops.txt",
+        "Galileo": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/galileo.txt"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
