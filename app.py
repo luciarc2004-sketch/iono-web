@@ -1394,23 +1394,23 @@ with tab6:
 
 
 
+
 # =====================================================================
 # PESTAÑA: TRACKING SATELITAL GLOBAL (CUALQUIER LOCALIDAD O COORDENADA)
 # =====================================================================
 with tab_aviacion:
     st.title("🛰️ Consola Global de Disponibilidad y Tracking GNSS")
     st.markdown("""
-    Analiza en tiempo real la geometría y visibilidad de las constelaciones **GPS, GLONASS y Galileo** 
-    sobre **cualquier punto del planeta**. Introduce una localidad o tus coordenadas exactas para 
+    Analiza en tiempo real la geometría y visibilidad de las constelaciones **GPS, GLONASS y Galileo** sobre **cualquier punto del planeta**. Introduce una localidad o tus coordenadas exactas para 
     calcular los satélites que cubren tu posición en este instante.
     """)
     st.divider()
 
-# 1. Configuración de URLs usando CorsProxy (Especializado en saltar bloqueos de Cloudflare)
+    # 1. Configuración de URLs dinámicas originales con Proxy Transparente
     GNSS_URLS = {
-        "GPS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gps-ops.txt",
-        "GLONASS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/glo-ops.txt",
-        "Galileo": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/galileo.txt"
+        "GPS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=TLE",
+        "GLONASS": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=TLE",
+        "Galileo": "https://corsproxy.io/?https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=TLE"
     }
 
     # Inicialización segura de herramientas astronómicas de Skyfield
@@ -1436,7 +1436,6 @@ with tab_aviacion:
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
             ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_tracking")
             if ciudad_usuario:
-                # Reutiliza tu función global de geocodificación
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
@@ -1444,19 +1443,17 @@ with tab_aviacion:
             lon_target = col_u2.number_input("Longitud (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_tracking")
             label_ubicacion = f"Coordenadas {lat_target:.2f}°, {lon_target:.2f}°"
 
-        # Control del ángulo de máscara (satélites muy bajos en el horizonte sufren refracción ionosférica)
+        # Control del ángulo de máscara
         angulo_mascara = st.slider("Ángulo de máscara de seguridad horizonte (°):", 0.0, 15.0, 5.0, step=0.5, key="sld_mascara_tracking")
 
         # 3. Procesamiento y cálculo orbital si la ubicación es válida
         if lat_target is not None and lon_target is not None:
             st.success(f"🎯 **Punto de Análisis Activo:** {label_ubicacion} | **Lat:** {lat_target:.4f}° | **Lon:** {lon_target:.4f}°")
             
-            # Crear el objeto observador en la superficie terrestre para Skyfield
             observador = Topos(latitude_degrees=lat_target, longitude_degrees=lon_target)
             
             if st.button("📡 Iniciar Escaneo de Órbitas Terrestres", key="btn_scan_universal"):
                 resumen_metricas = {}
-                headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
                 
                 st.divider()
                 st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
@@ -1464,9 +1461,16 @@ with tab_aviacion:
                 for nombre_grupo, url in GNSS_URLS.items():
                     with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
                         try:
-                            # User-Agent completo para evitar bloqueos
-                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-                            response = requests.get(url, headers=headers, timeout=20)
+                            # Cabeceras ultrarrealistas que fuerzan a no usar caché (Cache-Control)
+                            headers = {
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                                "Accept-Language": "en-US,en;q=0.5",
+                                "Cache-Control": "no-cache",
+                                "Pragma": "no-cache"
+                            }
+                            
+                            response = requests.get(url, headers=headers, timeout=25)
                             
                             if response.status_code != 200:
                                 st.error(f"Error de conexión con CelesTrak para {nombre_grupo}. Código: {response.status_code}")
@@ -1503,7 +1507,6 @@ with tab_aviacion:
                                     if alt.degrees >= angulo_mascara:
                                         linea_vista_segura += 1
                                         
-                                        # Punto geométrico exacto debajo del satélite
                                         geocentrico = satelite.at(tiempo_actual)
                                         subpoint = geocentrico.subpoint()
                                         
@@ -1524,7 +1527,6 @@ with tab_aviacion:
                                 "seguro": linea_vista_segura
                             }
                             
-                            # Desplegables de información detallada por constelación
                             with st.expander(f"🛰️ Detalles {nombre_grupo} ({linea_vista_segura} Satélites Disponibles)"):
                                 if tabla_satelites_visibles:
                                     st.dataframe(pd.DataFrame(tabla_satelites_visibles), use_container_width=True, hide_index=True)
@@ -1550,12 +1552,11 @@ with tab_aviacion:
                     
                     st.table(pd.DataFrame(columnas_resumen))
                     
-                    # Diagnóstico final automático de redundancia tridimensional
                     satelites_totales = sum(d["seguro"] for d in resumen_metricas.values())
                     if satelites_totales >= 4:
-                        st.success(f"✅ Triangulación óptima. {satelites_totales} satélites disponibles aseguran cálculos geométricos estables (cobertura GNSS multi-constelación garantizada).")
+                        st.success(f"✅ Triangulación óptima. {satelites_totales} satélites disponibles aseguran cálculos geométricos estables.")
                     else:
-                        st.warning(f"⚠️ Geometría deficiente. Solo {satelites_totales} satélites sobre el horizonte seguro. Riesgo alto de dilución de la precisión (DOP).")
+                        st.warning(f"⚠️ Geometría deficiente. Solo {satelites_totales} satélites sobre el horizonte seguro.")
         else:
             st.error("Por favor, introduce una localización o coordenadas válidas para iniciar los cálculos.")
 
