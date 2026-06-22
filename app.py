@@ -1461,7 +1461,7 @@ with tab_aviacion:
                 st.divider()
                 st.subheader("📊 Satélites Detectados en Línea de Vista Directa")
                 
-for nombre_grupo, url in GNSS_URLS.items():
+                for nombre_grupo, url in GNSS_URLS.items():
                     with st.spinner(f"Calculando posiciones para {nombre_grupo}..."):
                         try:
                             # User-Agent completo para evitar bloqueos
