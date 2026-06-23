@@ -29,7 +29,7 @@ st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 VMIN_TECU_FIJO = 0.0
-VMAX_TECU_FIJO = 55.0
+VMAX_TECU_FIJO = 100.0
 
 # Definición de la mallas estricta de Europa (Versión A)
 LAT_MIN, LAT_MAX, DELTA_LAT = 30, 72, 1
