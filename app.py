@@ -706,11 +706,15 @@ with tab3:
                     st.success(f"📊 Rango temporal procesado con éxito ({st.session_state.fuente_activa_t3}).")
 
        # 4. Bloque de Visualización Dinámica
-        if st.session_state.h_historial_vtec_3d is not None:
-            es_ionex_d = st.session_state.h_fuente_activa == "IONEX"
+        if st.session_state.historial_vtec_3d is not None:
             
-            ajuste_local_t3_horas = st.toggle("🔍 Optimizar rango de color al Máx/Mín real de estas 24 horas", key="toggle_t3_horas")
+            # --- LÍNEA QUE FALTA ---
+            es_ionex = st.session_state.fuente_activa_t3 == "IONEX"
+            # -----------------------
             
+            ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín...", key="toggle_t3_dias")
+            
+            # (El resto del código sigue igual...)
             # --- CORRECCIÓN DE SATURACIÓN ---
             if ajuste_local_t3_horas:
                 vmin_d = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d))))
