@@ -475,43 +475,44 @@ with tab2:
                 st.error(f"❌ Error en el puente suizo: {error}. Comprueba que la fecha sea posterior a 2022/2023 (formato moderno) y que el servidor de Berna esté online.")
 
     # 4. Renderizado Gráfico de la Ionosfera Planetaria
-    if st.session_state.matriz_ionex is not None:
-        st.divider()
-        
-        # Dimensiones de lienzo estándar Matplotlib (14x7 óptimo para mapas mundiales planos)
-        fig_global, ax_global = plt.subplots(figsize=(14, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
-        
-        # EL TRUCO ANTICLASH DE SHAPELY: Usar 179.99 evita colapsar las fronteras matemáticas del polígono del mapa
-        ax_global.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
-        
-        # Trazado de mapas base vectoriales transparentes
-        ax_global.add_feature(cfeature.COASTLINE, linewidth=0.9, edgecolor='black', zorder=3)
-        ax_global.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5, zorder=3)
-        
-        # REORDENACIÓN MATEMÁTICA: Python exige que el eje vertical crezca de Sur a Norte (-90 a 90).
-        # Invertimos el eje latitudinal y las filas de la matriz para que coincidan con la orientación de la Tierra
-        lats_ordenadas = st.session_state.lats_ionex[::-1]
-        matriz_ordenada = st.session_state.matriz_ionex[::-1, :]
-        
-        # Pintar el mapa con contornos suavizados (zorder=2 para quedar debajo de las costas de los países)
-        grafico_calor = ax_global.contourf(st.session_state.lons_ionex, lats_ordenadas, 
-                                           matriz_ordenada, levels=60, cmap='jet', 
-                                           transform=ccrs.PlateCarree(), zorder=2)
-        
-        # Barra lateral vertical estándar (Previene que el mapa sea aplastado por el redimensionamiento de Streamlit)
-        cbar_global = plt.colorbar(grafico_calor, ax=ax_global, orientation='vertical', pad=0.02, aspect=35)
-        cbar_global.set_label('Contenido Total de Electrones (TECU)', fontsize=12, weight='bold')
-        
-        plt.title(f"Mapa Ionosférico Planetario Global (IONEX) — {st.session_state.label_fecha_ionex}", fontsize=13, weight='bold', pad=15)
-        
-        # Cuadrícula e indicadores espaciales de Lat/Lon
-        grid_lines = ax_global.gridlines(draw_labels=True, color='black', alpha=0.25, linestyle='--')
-        grid_lines.top_labels = False
-        grid_lines.right_labels = False
+        if st.session_state.matriz_ionex is not None:
+            st.divider()
+            
+            # Dimensiones de lienzo estándar Matplotlib (14x7 óptimo para mapas mundiales)
+            fig_global, ax_global = plt.subplots(figsize=(14, 7), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+            
+            # SOLUCIÓN 1: set_global() evita forzar una caja delimitadora que rompa la geometría
+            ax_global.set_global()
+            
+            # Trazado de mapas base vectoriales transparentes
+            ax_global.add_feature(cfeature.COASTLINE, linewidth=0.9, edgecolor='black', zorder=3)
+            ax_global.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5, zorder=3)
+            
+            # REORDENACIÓN MATEMÁTICA: Python exige que el eje vertical crezca de Sur a Norte (-90 a 90).
+            lats_ordenadas = st.session_state.lats_ionex[::-1]
+            matriz_ordenada = st.session_state.matriz_ionex[::-1, :]
+            
+            # Pintar el mapa con contornos suavizados
+            grafico_calor = ax_global.contourf(st.session_state.lons_ionex, lats_ordenadas, 
+                                               matriz_ordenada, levels=60, cmap='jet', 
+                                               transform=ccrs.PlateCarree(), zorder=2)
+            
+            # Barra lateral vertical estándar 
+            cbar_global = plt.colorbar(grafico_calor, ax=ax_global, orientation='vertical', pad=0.02, aspect=35)
+            cbar_global.set_label('Contenido Total de Electrones (TECU)', fontsize=12, weight='bold')
+            
+            plt.title(f"Mapa Ionosférico Planetario Global (IONEX) — {st.session_state.label_fecha_ionex}", fontsize=13, weight='bold', pad=15)
+            
+            # SOLUCIÓN 2 (Bypass a Shapely): Usamos marcas de ejes nativas en lugar de gridlines()
+            ax_global.set_xticks([-180, -120, -60, 0, 60, 120, 180], crs=ccrs.PlateCarree())
+            ax_global.set_yticks([-90, -60, -30, 0, 30, 60, 90], crs=ccrs.PlateCarree())
+            
+            plt.tight_layout() # Fuerza el balanceo de márgenes
+            st.pyplot(fig_global)
+            plt.close(fig_global)
 
-        plt.tight_layout() # Fuerza el balanceo de márgenes
-        st.pyplot(fig_global)
-        plt.close(fig_global)
+        # 5. Panel de Consulta Avanzada (Buscador de Puntos Globales)
+        # (Asegúrate de dejar debajo de esto el código del buscador que ya tenías)
 
         # 5. Panel de Consulta Avanzada (Buscador de Puntos Globales)
         st.divider()
