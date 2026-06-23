@@ -448,7 +448,7 @@ with tab2:
             except Exception as e:
                 st.error(f"❌ Error durante la ejecución del procesador IONEX: {e}")
 
-    # Renderizado condicional de IONEX
+# Renderizado condicional de IONEX
     if st.session_state.matriz_ionex is not None:
         st.divider()
         
@@ -460,9 +460,17 @@ with tab2:
         ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black', zorder=3)
         ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.4, zorder=3)
         
-        mapa_i = ax_i.contourf(st.session_state.lons_ionex, st.session_state.lats_ionex, 
-                               st.session_state.matriz_ionex, levels=60, cmap='jet', 
+        # --- AQUÍ ESTÁ LA MAGIA ---
+        # Matplotlib necesita que las latitudes crezcan de Sur a Norte. 
+        # Invertimos los datos visuales para que coincidan con la Tierra:
+        lats_plot = st.session_state.lats_ionex[::-1]
+        matriz_plot = st.session_state.matriz_ionex[::-1, :]
+        
+        # Le pasamos las variables invertidas a contourf
+        mapa_i = ax_i.contourf(st.session_state.lons_ionex, lats_plot, 
+                               matriz_plot, levels=60, cmap='jet', 
                                transform=ccrs.PlateCarree(), zorder=2)
+        # --------------------------
         
         cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='horizontal', pad=0.08, shrink=0.6)
         cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=11, weight='bold')
