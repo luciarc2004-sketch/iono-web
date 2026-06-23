@@ -1567,7 +1567,6 @@ with tab4:
             for idx, f_fut in enumerate(st.session_state.p4_fechas_futuro):
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
 
-
 # =====================================================================
 # PESTAÑA 5: DESVIACIONES DEL MODELO 
 # =====================================================================
@@ -1677,7 +1676,7 @@ with tab5:
             horizontal=True, key="radio_sub_p5"
         )
         
-        # Sistema dual alternativo de entrada de localización común para la pestaña
+        # Sistema dual alternativo de entrada de localización
         st.markdown("#### 📍 Punto de Control e Intermediación")
         p5_tipo_pos = st.radio("Método de entrada de localización para control:", ["Buscar por Nombre", "Introducir Coordenadas Manuales"], horizontal=True, key="p5_pos_radio")
         
@@ -1739,22 +1738,25 @@ with tab5:
             ax_p5_d.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
             ax_p5_d.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
             
-            grid_d = ax_p5_d.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
-            grid_d.top_labels, grid_d.right_labels = False, False
-            grid_d.xformatter, grid_d.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+            # --- BYPASS A SHAPELY GRIDLINES ---
+            ax_p5_d.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+            ax_p5_d.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+            ax_p5_d.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+            ax_p5_d.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+            ax_p5_d.grid(True, color='gray', alpha=0.3, linestyle='--')
+            # ----------------------------------
 
             mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
                                         transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
             
-            # CORRECCIÓN 1: Barra vertical y pad ajustado para que no aplaste el mapa
             plt.colorbar(mapa_d, ax=ax_p5_d, orientation='vertical', pad=0.02, aspect=35).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
             ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC\n[Blanco = Coincidencia | Rojo = Sobreestima | Azul = Subestima]", fontsize=10, weight='bold')
             
-            plt.tight_layout() # CORRECCIÓN 2: Forzar balance de márgenes estricto
+            plt.tight_layout()
             st.pyplot(fig_p5_d)
             plt.close(fig_p5_d)
 
-            # Reproductor dinámico - CORREGIDO CON PROYECCIÓN CARTOPY INTRADÍA
+            # Reproductor dinámico
             st.subheader("🎬 Reproductor Dinámico de la Desviación (24 Horas)")
             if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
                 contenedor_p5_anim = st.empty()
@@ -1766,18 +1768,21 @@ with tab5:
                     ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
                     ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
                     
-                    grid_a = ax_a.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
-                    grid_a.top_labels, grid_a.right_labels = False, False
-                    grid_a.xformatter, grid_a.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+                    # --- BYPASS A SHAPELY GRIDLINES ---
+                    ax_a.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+                    ax_a.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+                    ax_a.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+                    ax_a.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+                    ax_a.grid(True, color='gray', alpha=0.3, linestyle='--')
+                    # ----------------------------------
                     
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
                     
-                    # CORRECCIÓN 3: Barra vertical en el reproductor animado también
                     plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('DESVIACIÓN EN METROS', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
                     
-                    plt.tight_layout() # CORRECCIÓN 4: Forzar márgenes en el reproductor
+                    plt.tight_layout()
                     contenedor_p5_anim.pyplot(fig_a)
                     plt.close(fig_a)
                     time.sleep(0.4)
@@ -1802,18 +1807,21 @@ with tab5:
             ax_p5_r.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
             ax_p5_r.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
             
-            grid_r = ax_p5_r.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
-            grid_r.top_labels, grid_r.right_labels = False, False
-            grid_r.xformatter, grid_r.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+            # --- BYPASS A SHAPELY GRIDLINES ---
+            ax_p5_r.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+            ax_p5_r.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+            ax_p5_r.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+            ax_p5_r.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+            ax_p5_r.grid(True, color='gray', alpha=0.3, linestyle='--')
+            # ----------------------------------
 
             mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
                                         transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
             
-            # CORRECCIÓN 5: Barra vertical y pad estrecho para el mapa de incertidumbre RMS
             plt.colorbar(mapa_r, ax=ax_p5_r, orientation='vertical', pad=0.02, aspect=35).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
             ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
             
-            plt.tight_layout() # CORRECCIÓN 6: Forzar márgenes finales del pilar 2
+            plt.tight_layout()
             st.pyplot(fig_p5_r)
             plt.close(fig_p5_r)
 
