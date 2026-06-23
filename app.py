@@ -4,6 +4,11 @@ import requests
 import time
 import numpy as np
 import pandas as pd
+import urllib.request
+import gzip
+import shutil
+import os
+import re
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import cartopy.crs as ccrs
@@ -249,24 +254,31 @@ with tab1:
     except Exception as e: 
         st.error(f"Error en Tiempo Real: {e}")
 # =====================================================================
-# PESTAÑA 2: ANÁLISIS EN EL PASADO
+# PESTAÑA 2: ANÁLISIS EN EL PASADO (HÍBRIDO DLR / IONEX)
 # =====================================================================
 with tab2:
-    st.title("📊 Análisis Histórico: Mapas e Interpolar en el Pasado")
+    st.title("📊 Análisis Histórico Ionosférico")
+    
+    # =================================================================
+    # --- SUB-SECCIÓN A: MOTOR REGIONAL DLR ---
+    # =================================================================
+    st.header("🇪🇺 Malla Regional Europa (Fuente: DLR)")
+    st.markdown("Consulta el registro histórico rápido del Centro Aeroespacial Alemán (DLR). Válido para los últimos días.")
+    
     if 'matriz_pasado' not in st.session_state:
         st.session_state.matriz_pasado = None
     if 'fecha_mapa' not in st.session_state:
         st.session_state.fecha_mapa = ""
 
     col_f1, col_f2, col_f3 = st.columns(3)
-    fecha_sel = col_f1.date_input("Selecciona la Fecha:", datetime.date(2026, 1, 24), key="past_date")
+    fecha_sel = col_f1.date_input("Selecciona la Fecha (DLR):", datetime.date.today() - datetime.timedelta(days=1), key="past_date")
     hora_sel = col_f2.slider("Hora (UTC):", 0, 23, 4, key="past_hour")
     minuto_sel = col_f3.slider("Minuto:", 0, 55, 0, step=5, key="past_min")
 
     minuto_ajustado = (minuto_sel // 15) * 15
     url_pasado = generar_enlace_dlr_seguro(fecha_sel.year, fecha_sel.month, fecha_sel.day, hora_sel, minuto_ajustado)
 
-    if st.button("🚀 Cargar Mapa"):
+    if st.button("🚀 Cargar Mapa DLR", key="btn_load_dlr"):
         with st.spinner("Sincronizando Malla Geomagnética Histórica con el DLR..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             try:
@@ -275,20 +287,19 @@ with tab2:
                 vtec_p_list = [f['properties']['vtec_assimilated_tecu'] for f in response.json()['data']['grid']['features']]
                 st.session_state.matriz_pasado = np.array(vtec_p_list).reshape(43, 81)
                 st.session_state.fecha_mapa = f"{fecha_sel.strftime('%d/%m/%Y')} - {hora_sel:02d}:{minuto_ajustado:02d} UTC"
-                st.success("📌 Archivo cargado correctamente.")
-            except Exception: st.error("❌ No existen registros en el DLR para la fecha/hora solicitada.")
+                st.success("📌 Archivo DLR cargado correctamente.")
+            except Exception: 
+                st.error("❌ No existen registros en el DLR para la fecha/hora solicitada (caducan en pocos días). Usa el buscador IONEX abajo.")
 
     if st.session_state.matriz_pasado is not None:
         st.divider()
-        
-
-        ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local de este mapa pasado", key="toggle_t2")
+        ajuste_local_t2 = st.toggle("🔍 Optimizar rango de color al Máx/Mín local", key="toggle_t2")
         
         if ajuste_local_t2:
             vmin_p, vmax_p = float(np.min(st.session_state.matriz_pasado)), float(np.max(st.session_state.matriz_pasado))
             lbl_status_p = "Rango de Color Adaptado Localmente"
         else:
-            vmin_p, vmax_p = VMIN_TECU_FIJO, VMAX_TECU_FIJO
+            vmin_p, vmax_p = 0, 55 # O tus variables VMIN_TECU_FIJO / VMAX_TECU_FIJO si las tienes
             lbl_status_p = "Escala Fija Universal (0-55 TECU)"
 
         fig_p = plt.figure(figsize=(11, 6), dpi=100)
@@ -304,9 +315,8 @@ with tab2:
         plt.close(fig_p)
 
         st.divider()
-        st.subheader("📍 Valor VTEC de un punto")
+        st.subheader("📍 Valor VTEC de un punto (Datos DLR)")
         
-        # INTERFAZ DUAL DE LOCALIZACIÓN (Puntos de consulta 2)
         tipo_busqueda_t2 = st.radio("Método de entrada de localización histórica:", ["Buscar por Nombre", "Coordenadas directas (Lat/Lon)"], horizontal=True, key="radio_t2")
         
         lat_p, lon_p, label_p = None, None, ""
@@ -327,7 +337,129 @@ with tab2:
                 val_tecu_p = float(interp_p(np.array([[lat_p, lon_p]]))[0])
                 st.metric(label=f"Intensidad Calculada ({label_p})", value=f"{val_tecu_p:.3f} TECU")
                 st.caption(f"Coordenadas evaluadas: {lat_p:.3f}°N, {lon_p:.3f}°E")
-            else: st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
+            else: 
+                st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
+
+    # =================================================================
+    # --- SUB-SECCIÓN B: ANÁLISIS HISTÓRICO EXTENDIDO (IONEX) ---
+    # =================================================================
+    st.write("\n" * 2)
+    st.divider()
+    st.header("🌍 DATOS IONEX (Archivo Histórico Universal)")
+    st.markdown("""
+    Descarga en tiempo real mapas ionosféricos globales en formato estándar **IONEX (.INX)**. 
+    Audita el estado del espacio en cualquier fecha histórica. **(Fuente: CODE / Universidad de Berna)**.
+    """)
+    
+    # 1. Definición de las funciones del motor IONEX (basado en tu script)
+    def generar_url_ionex(fecha):
+        year = fecha.strftime("%Y")
+        doy = fecha.strftime("%j") 
+        nombre_archivo = f"COD0OPSFIN_{year}{doy}0000_01D_01H_GIM.INX.gz"
+        return f"http://ftp.aiub.unibe.ch/CODE/{year}/{nombre_archivo}"
+
+    def obtener_matriz_ionex_por_hora(fecha_objetivo, hora_objetivo):
+        url_archivo = generar_url_ionex(fecha_objetivo)
+        archivo_gz = "temp_datos.INX.gz"
+        archivo_ionex = "temp_datos.23i"
+
+        # 1. Descarga y extracción
+        urllib.request.urlretrieve(url_archivo, archivo_gz)
+        with gzip.open(archivo_gz, 'rb') as f_in:
+            with open(archivo_ionex, 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+
+        # 2. Preparar los ejes
+        lats = np.arange(87.5, -87.6, -2.5) 
+        lons = np.arange(-180.0, 180.1, 5.0) 
+        tec_grid = np.zeros((len(lats), len(lons)))
+        
+        exponente = -1
+        mapa_correcto = False
+        lat_idx = 0
+        
+        # 3. Parseo de datos
+        try:
+            with open(archivo_ionex, 'r') as f:
+                lineas = f.readlines()
+                
+            for i, linea in enumerate(lineas):
+                if "EXPONENT" in linea:
+                    numeros = re.findall(r'-?\d+', linea)
+                    if numeros: exponente = int(numeros[0])
+                
+                if "EPOCH OF CURRENT MAP" in linea:
+                    partes = linea.split()
+                    hora_mapa = int(partes[3])
+                    if hora_mapa == hora_objetivo:
+                        mapa_correcto = True
+                    else:
+                        mapa_correcto = False
+                    
+                if "END OF TEC MAP" in linea and mapa_correcto:
+                    break 
+                    
+                if mapa_correcto and "LAT/LON1/LON2/DLON/H" in linea:
+                    valores_tec = []
+                    offset = 1
+                    while len(valores_tec) < 73 and i + offset < len(lineas):
+                        linea_datos = lineas[i + offset].rstrip('\n')
+                        for j in range(0, len(linea_datos), 5):
+                            fragmento = linea_datos[j:j+5].strip()
+                            if fragmento:
+                                valores_tec.append(int(fragmento))
+                        offset += 1
+                    
+                    tec_grid[lat_idx, :] = np.array(valores_tec) * (10 ** exponente)
+                    lat_idx += 1
+
+            if not mapa_correcto and lat_idx == 0:
+                raise ValueError(f"No se encontraron datos para la hora {hora_objetivo}:00.")
+
+            return lats, lons, tec_grid
+
+        finally:
+            # Limpieza de archivos
+            if os.path.exists(archivo_gz): os.remove(archivo_gz)
+            if os.path.exists(archivo_ionex): os.remove(archivo_ionex)
+
+    # 2. Interfaz de usuario para descargar IONEX
+    col_i1, col_i2 = st.columns(2)
+    fecha_deseada = col_i1.date_input("Fecha Histórica (IONEX):", datetime.date(2023, 5, 10), key="ionex_date")
+    hora_deseada = col_i2.slider("Hora UTC (IONEX):", 0, 23, 12, key="ionex_hour")
+
+    if st.button("🌍 Descargar, Extraer y Graficar IONEX", key="btn_ionex"):
+        with st.spinner(f"Conectando con el servidor CODE en Suiza para el {fecha_deseada.strftime('%d/%m/%Y')} a las {hora_deseada}:00 UTC... (Puede tardar 10-20 segundos)"):
+            try:
+                # Ejecutar algoritmo
+                latitudes_i, longitudes_i, matriz_tec_i = obtener_matriz_ionex_por_hora(fecha_deseada, hora_deseada)
+                
+                # Graficar resultados en Streamlit
+                fig_i = plt.figure(figsize=(14, 7), dpi=100)
+                ax_i = plt.axes(projection=ccrs.PlateCarree())
+                ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black')
+                ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5)
+                
+                mapa_i = ax_i.contourf(longitudes_i, latitudes_i, matriz_tec_i, levels=60, cmap='jet', transform=ccrs.PlateCarree())
+                
+                cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='vertical', pad=0.02, shrink=0.7)
+                cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=12)
+                
+                plt.title(f"Ionosfera Global (IONEX) - {fecha_deseada.strftime('%d %b %Y')} a las {hora_deseada}:00 UTC", fontsize=14, pad=15)
+                
+                gl_i = ax_i.gridlines(draw_labels=True, color='black', alpha=0.3, linestyle='--')
+                gl_i.top_labels = False
+                gl_i.right_labels = False
+
+                # Imprimir mapa en la web
+                st.success("✅ Archivo IONEX descargado y decodificado exitosamente.")
+                st.pyplot(fig_i)
+                plt.close(fig_i)
+
+            except urllib.error.HTTPError as e:
+                st.error(f"❌ El servidor de Suiza no tiene disponible el archivo para esa fecha exacta (Error HTTP {e.code}). Asegúrate de no pedir datos del futuro o de fechas sin registro.")
+            except Exception as e:
+                st.error(f"❌ Error durante la ejecución del procesador IONEX: {e}")
 
 # =====================================================================
 # PESTAÑA 3: EVOLUCIÓN TECU (REPRODUCTOR DINÁMICO DE "FLAMES" INYECTADO)
