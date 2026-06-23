@@ -340,7 +340,7 @@ with tab2:
             else: 
                 st.warning("Las coordenadas introducidas están fuera de la cuadrícula de Europa.")
 
-    # =================================================================
+   # =================================================================
     # --- SUB-SECCIÓN B: ANÁLISIS HISTÓRICO EXTENDIDO (IONEX) ---
     # =================================================================
     st.write("\n" * 2)
@@ -351,7 +351,16 @@ with tab2:
     Audita el estado del espacio en cualquier fecha histórica. **(Fuente: CODE / Universidad de Berna)**.
     """)
     
-    # 1. Definición de las funciones del motor IONEX (basado en tu script)
+    # 1. Definición de las funciones del motor IONEX (Variables en session_state para persistencia)
+    if 'matriz_ionex' not in st.session_state:
+        st.session_state.matriz_ionex = None
+    if 'lats_ionex' not in st.session_state:
+        st.session_state.lats_ionex = None
+    if 'lons_ionex' not in st.session_state:
+        st.session_state.lons_ionex = None
+    if 'label_fecha_ionex' not in st.session_state:
+        st.session_state.label_fecha_ionex = ""
+
     def generar_url_ionex(fecha):
         year = fecha.strftime("%Y")
         doy = fecha.strftime("%j") 
@@ -363,13 +372,11 @@ with tab2:
         archivo_gz = "temp_datos.INX.gz"
         archivo_ionex = "temp_datos.23i"
 
-        # 1. Descarga y extracción
         urllib.request.urlretrieve(url_archivo, archivo_gz)
         with gzip.open(archivo_gz, 'rb') as f_in:
             with open(archivo_ionex, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
-        # 2. Preparar los ejes
         lats = np.arange(87.5, -87.6, -2.5) 
         lons = np.arange(-180.0, 180.1, 5.0) 
         tec_grid = np.zeros((len(lats), len(lons)))
@@ -378,7 +385,6 @@ with tab2:
         mapa_correcto = False
         lat_idx = 0
         
-        # 3. Parseo de datos
         try:
             with open(archivo_ionex, 'r') as f:
                 lineas = f.readlines()
@@ -419,48 +425,93 @@ with tab2:
             return lats, lons, tec_grid
 
         finally:
-            # Limpieza de archivos
             if os.path.exists(archivo_gz): os.remove(archivo_gz)
             if os.path.exists(archivo_ionex): os.remove(archivo_ionex)
 
-    # 2. Interfaz de usuario para descargar IONEX
+    # 2. Interfaz de selección temporal
     col_i1, col_i2 = st.columns(2)
     fecha_deseada = col_i1.date_input("Fecha Histórica (IONEX):", datetime.date(2023, 5, 10), key="ionex_date")
     hora_deseada = col_i2.slider("Hora UTC (IONEX):", 0, 23, 12, key="ionex_hour")
 
     if st.button("🌍 Descargar, Extraer y Graficar IONEX", key="btn_ionex"):
-        with st.spinner(f"Conectando con el servidor CODE en Suiza para el {fecha_deseada.strftime('%d/%m/%Y')} a las {hora_deseada}:00 UTC... (Puede tardar 10-20 segundos)"):
+        with st.spinner(f"Conectando con el servidor CODE en Suiza... (Procesando mallas globales)"):
             try:
-                # Ejecutar algoritmo
-                latitudes_i, longitudes_i, matriz_tec_i = obtener_matriz_ionex_por_hora(fecha_deseada, hora_deseada)
+                lats_i, lons_i, matriz_tec_i = obtener_matriz_ionex_por_hora(fecha_deseada, hora_deseada)
                 
-                # Graficar resultados en Streamlit
-                fig_i = plt.figure(figsize=(14, 7), dpi=100)
-                ax_i = plt.axes(projection=ccrs.PlateCarree())
-                ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black')
-                ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5)
-                
-                mapa_i = ax_i.contourf(longitudes_i, latitudes_i, matriz_tec_i, levels=60, cmap='jet', transform=ccrs.PlateCarree())
-                
-                cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='vertical', pad=0.02, shrink=0.7)
-                cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=12)
-                
-                plt.title(f"Ionosfera Global (IONEX) - {fecha_deseada.strftime('%d %b %Y')} a las {hora_deseada}:00 UTC", fontsize=14, pad=15)
-                
-                gl_i = ax_i.gridlines(draw_labels=True, color='black', alpha=0.3, linestyle='--')
-                gl_i.top_labels = False
-                gl_i.right_labels = False
-
-                # Imprimir mapa en la web
+                # Guardamos en sesión para que persistan al interactuar con el buscador de puntos
+                st.session_state.matriz_ionex = matriz_tec_i
+                st.session_state.lats_ionex = lats_i
+                st.session_state.lons_ionex = lons_i
+                st.session_state.label_fecha_ionex = f"{fecha_deseada.strftime('%d/%m/%Y')} - {hora_deseada:02d}:00 UTC"
                 st.success("✅ Archivo IONEX descargado y decodificado exitosamente.")
-                st.pyplot(fig_i)
-                plt.close(fig_i)
-
-            except urllib.error.HTTPError as e:
-                st.error(f"❌ El servidor de Suiza no tiene disponible el archivo para esa fecha exacta (Error HTTP {e.code}). Asegúrate de no pedir datos del futuro o de fechas sin registro.")
             except Exception as e:
                 st.error(f"❌ Error durante la ejecución del procesador IONEX: {e}")
 
+    # Renderizado condicional si hay datos en caché
+    if st.session_state.matriz_ionex is not None:
+        st.divider()
+        
+        # Ajuste de proporciones para evitar exceso de zoom (Escala 12x6 balanceada para mapas globales)
+        fig_i = plt.figure(figsize=(12, 6), dpi=100)
+        ax_i = plt.axes(projection=ccrs.PlateCarree())
+        
+        # Encuadre exacto planetario para fijar la cámara
+        ax_i.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
+        
+        ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black', zorder=3)
+        ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.4, zorder=3)
+        ax_i.add_feature(cfeature.LAND, facecolor='#fbfbfb', zorder=1)
+        ax_i.add_feature(cfeature.OCEAN, facecolor='#eef7fc', zorder=1)
+        
+        # Malla matemática exacta de coordenadas globales para evitar deformación por interpolación
+        lon_mesh, lat_mesh = np.meshgrid(st.session_state.lons_ionex, st.session_state.lats_ionex)
+        
+        # Cambiamos contourf por pcolormesh para pintar celdas reales y evitar distorsiones
+        mapa_i = ax_i.pcolormesh(lon_mesh, lat_mesh, st.session_state.matriz_ionex, 
+                                 transform=ccrs.PlateCarree(), cmap='jet', alpha=0.75, shading='gouraud')
+        
+        cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='horizontal', pad=0.08, shrink=0.6)
+        cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=11, weight='bold')
+        
+        plt.title(f"Ionosfera Planetaria Global - {st.session_state.label_fecha_ionex}", fontsize=12, weight='bold', pad=10)
+        
+        gl_i = ax_i.gridlines(draw_labels=True, color='gray', alpha=0.2, linestyle='--')
+        gl_i.top_labels = False
+        gl_i.right_labels = False
+
+        st.pyplot(fig_i)
+        plt.close(fig_i)
+
+        # --- NUEVO BUSCADOR DE PUNTOS PARA MAPAS GLOBALES IONEX ---
+        st.divider()
+        st.subheader("📍 Valor VTEC Global de un punto (Datos IONEX)")
+        
+        tipo_busqueda_ionex = st.radio("Método de entrada de localización planetaria:", ["Buscar por Localidad", "Coordenadas manuales globales (Lat/Lon)"], horizontal=True, key="radio_b_ionex")
+        
+        lat_i_pts, lon_i_pts, label_i_pts = None, None, ""
+        
+        if tipo_busqueda_ionex == "Buscar por Localidad":
+            localidad_i_usuario = st.text_input("Ingresa cualquier ciudad del mundo (ej. Tokio, New York, Buenos Aires):", "Madrid", key="txt_search_ionex")
+            if localidad_i_usuario:
+                lat_i_pts, lon_i_pts, label_i_pts = geocodificar_localidad(localidad_i_usuario)
+        else:
+            col_li1, col_li2 = st.columns(2)
+            lat_i_pts = col_li1.number_input("Latitud planetaria (°N/°S):", min_value=-90.0, max_value=90.0, value=40.41, step=0.01, key="num_lat_ionex")
+            lon_i_pts = col_li2.number_input("Longitud planetaria (°E/°W):", min_value=-180.0, max_value=180.0, value=-3.70, step=0.01, key="num_lon_ionex")
+            label_i_pts = f"Punto de Control Fijo"
+
+        if lat_i_pts is not None and lon_i_pts is not None:
+            # Dado que el archivo de la Universidad de Berna baja de Norte a Sur, invertimos los ejes para RegularGridInterpolator
+            lats_invertidas = st.session_state.lats_ionex[::-1]
+            matriz_invertida = st.session_state.matriz_ionex[::-1, :]
+            
+            # Crear el interpolador lineal esférico global
+            interp_ionex = RegularGridInterpolator((lats_invertidas, st.session_state.lons_ionex), matriz_invertida, method='linear', bounds_error=False, fill_value=None)
+            
+            val_tecu_ionex = float(interp_ionex(np.array([[lat_i_pts, lon_i_pts]]))[0])
+            
+            st.metric(label=f"Intensidad de Electrones Calculada ({label_i_pts})", value=f"{val_tecu_ionex:.3f} TECU")
+            st.caption(f"Coordenadas analizadas: {lat_i_pts:.4f}°N, {lon_i_pts:.4f}°E (Mapa: {st.session_state.label_fecha_ionex})")
 # =====================================================================
 # PESTAÑA 3: EVOLUCIÓN TECU (REPRODUCTOR DINÁMICO DE "FLAMES" INYECTADO)
 # =====================================================================
