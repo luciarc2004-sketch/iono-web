@@ -111,7 +111,7 @@ with tab1:
 
     # MOTOR DE CARGA DE ALTA VELOCIDAD: Filtra en memoria y prepara vectores masivos
     @st.cache_data
- # MOTOR DE CARGA CORREGIDO PARA LA ESTRUCTURA REAL DE TU JSON
+ # MOTOR DE CARGA CORREGIDO PARA LA ESTRUCTURA REAL DEL ARCHIVO JSON
     @st.cache_data
     def cargar_aeropuertos_optimizado():
         try:
@@ -1052,7 +1052,7 @@ with tab4:
                                color='#ff3d00', alpha=0.1, label='Margen de Error')
             str_titulo_modo = "SIMULACIÓN HISTÓRICA CON VALIDACIÓN"
         else:
-            # Si es tiempo real pintamos el sombreado rosa de "zona de pronóstico hacia el futuro" de tu script
+            # Si es tiempo real en sombreado rosa 
             ax_p4.axvspan(st.session_state.p4_fechas_pasado[-1], st.session_state.p4_fechas_futuro[-1], 
                           color='#ffebee', alpha=0.5, label='Zona de Pronóstico Ionosférico')
             str_titulo_modo = f"TIEMPO REAL OPERATIVO (ACTIVO HASTA LAS {st.session_state.p4_fechas_futuro[-1].strftime('%H:%M')} UTC)"
@@ -1122,7 +1122,7 @@ with tab5:
     p5_constelacion = col_v2.selectbox("📡 Señal GNSS de Referencia:", list(FRECUENCIAS_GNSS_P5.keys()), key="p5_select_freq")
     p5_hora_vista = col_v3.slider("Hora de Observación Estática (UTC):", 0, 23, 13, key="p5_hour_static")
 
-    # Factor de conversión unificado de tu ecuación física de refracción
+    # Factor de conversión unificado de la ecuación física de refracción
     f_hz_p5 = FRECUENCIAS_GNSS_P5[p5_constelacion]
     FACTOR_METROS_P5 = (40.3 / (f_hz_p5 ** 2)) * 1e16
 
@@ -1331,7 +1331,7 @@ with tab5:
             plt.close(fig_p5_r)
 
 # =====================================================================
-# PESTAÑA 6: COMENTARIOS Y FEEDBACK (TU BASE PERSONALIZADA CORREGIDA)
+# PESTAÑA 6: COMENTARIOS Y FEEDBACK 
 # =====================================================================
 with tab6:
     st.title("💬 Buzón de Sugerencias y Feedback")
@@ -1360,7 +1360,7 @@ with tab6:
         if not comentario.strip():
             st.error("⚠️ Por favor, escribe un comentario antes de continuar.")
         else:
-            # Configuramos tus datos de recepción (Mantenemos tu correo real)
+            # Configuramos tus datos de recepción
             TU_EMAIL = "luciarc2004@gmail.com"  
             asunto_correo = f"[FEEDBACK PORTAL IONOSFERA] - {tipo_comentario}"
             
@@ -1447,7 +1447,7 @@ with tab_aviacion:
         if tipo_posicionamiento == "Buscar por localidad / ciudad":
             ciudad_usuario = st.text_input("Escribe el nombre de la ciudad o región:", "Madrid", key="txt_ciudad_man")
             if ciudad_usuario:
-                # Usa la función global que ya tenías definida en tu app para sacar las coordenadas
+                # Usa la función global que ya definida para sacar las coordenadas
                 lat_target, lon_target, label_ubicacion = geocodificar_localidad(ciudad_usuario)
         else:
             col_u1, col_u2 = st.columns(2)
