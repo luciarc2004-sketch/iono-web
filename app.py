@@ -78,13 +78,13 @@ def geocodificar_localidad(nombre_lugar):
     except Exception: pass
     return None, None, None
 
-def generar_enlace_dlr_seguro(anio, mes, dia, hora, minuto):
-    fecha_fin = datetime.datetime(anio, mes, dia, hora, minuto, 0)
-    str_anio = fecha_fin.strftime("%Y")
+def generar_enlace_dlr_seguro(año, mes, dia, hora, minuto):
+    fecha_fin = datetime.datetime(año, mes, dia, hora, minuto, 0)
+    str_año = fecha_fin.strftime("%Y")
     str_doy = fecha_fin.strftime("%j")
     str_hora = fecha_fin.strftime("%H")
     fecha_inicio = fecha_fin - datetime.timedelta(minutes=4, seconds=30)
-    return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
+    return f"https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0/{str_año}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{fecha_inicio.strftime('%Y-%m-%dT%H-%M-%S')}_{fecha_fin.strftime('%Y-%m-%dT%H-%M-%S')}_{str_doy}_D.json"
 # =====================================================================
 # PESTAÑA 1: INICIO Y MONITOREO EN TIEMPO REAL (VERSIÓN AERONÁUTICA PRO)
 # =====================================================================
@@ -1616,14 +1616,14 @@ with tab_aviacion:
             return None, None
 
     def generar_enlace_dlr_historico(fecha_busqueda):
-        str_anio = fecha_busqueda.strftime("%Y")
+        str_año = fecha_busqueda.strftime("%Y")
         str_doy = fecha_busqueda.strftime("%j")
         str_hora = fecha_busqueda.strftime("%H")
         fecha_inicio = fecha_busqueda - datetime.timedelta(minutes=4, seconds=30)
         timestamp_inicio = fecha_inicio.strftime("%Y-%m-%dT%H-%M-%S")
         timestamp_fin = fecha_busqueda.strftime("%Y-%m-%dT%H-%M-%S")
         base_url = "https://impc.dlr.de/SWE/Total_Electron_Content/TEC_Near_Real-Time/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE/v2.0.0"
-        return f"{base_url}/{str_anio}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
+        return f"{base_url}/{str_año}/{str_doy}/{str_hora}/DLR_GNSS_GCG_L4_VTEC-NTCM-SCM_NC_EUROPE_{timestamp_inicio}_{timestamp_fin}_{str_doy}_D.json"
 
     @st.cache_data(ttl=3600, show_spinner=False)
     def descargar_malla_vuelo(fecha_obj):
