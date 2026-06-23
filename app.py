@@ -452,37 +452,35 @@ with tab2:
     if st.session_state.matriz_ionex is not None:
         st.divider()
         
-        fig_i = plt.figure(figsize=(12, 6), dpi=100)
+        # Volvemos a las proporciones de tu script original (14x7)
+        fig_i = plt.figure(figsize=(14, 7), dpi=100)
         ax_i = plt.axes(projection=ccrs.PlateCarree())
         
-        ax_i.set_extent([-180, 180, -90, 90], crs=ccrs.PlateCarree())
-        
+        # Añadimos costas y fronteras
         ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black', zorder=3)
-        ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.4, zorder=3)
+        ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5, zorder=3)
         
-        # --- AQUÍ ESTÁ LA MAGIA ---
-        # Matplotlib necesita que las latitudes crezcan de Sur a Norte. 
-        # Invertimos los datos visuales para que coincidan con la Tierra:
-        lats_plot = st.session_state.lats_ionex[::-1]
-        matriz_plot = st.session_state.matriz_ionex[::-1, :]
-        
-        # Le pasamos las variables invertidas a contourf
-        mapa_i = ax_i.contourf(st.session_state.lons_ionex, lats_plot, 
-                               matriz_plot, levels=60, cmap='jet', 
+        # Usamos contourf exactamente igual que en tu script local
+        mapa_i = ax_i.contourf(st.session_state.lons_ionex, st.session_state.lats_ionex, 
+                               st.session_state.matriz_ionex, levels=60, cmap='jet', 
                                transform=ccrs.PlateCarree(), zorder=2)
-        # --------------------------
         
-        cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='horizontal', pad=0.08, shrink=0.6)
-        cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=11, weight='bold')
+        # BARRA VERTICAL: Esto es clave para que Cartopy no aplaste el mapa en Streamlit
+        cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='vertical', pad=0.02, aspect=40)
+        cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=12, weight='bold')
         
-        plt.title(f"Ionosfera Planetaria Global - {st.session_state.label_fecha_ionex}", fontsize=12, weight='bold', pad=10)
+        plt.title(f"Ionosfera Planetaria Global - {st.session_state.label_fecha_ionex}", fontsize=14, weight='bold', pad=15)
         
-        gl_i = ax_i.gridlines(draw_labels=True, color='gray', alpha=0.4, linestyle='--')
+        gl_i = ax_i.gridlines(draw_labels=True, color='black', alpha=0.3, linestyle='--')
         gl_i.top_labels = False
         gl_i.right_labels = False
 
+        plt.tight_layout() # Obliga a recalcular y respetar los márgenes
         st.pyplot(fig_i)
         plt.close(fig_i)
+
+        # --- BUSCADOR INTERACTIVO DE PUNTOS GLOBALES IONEX ---
+        # (El resto del código del buscador sigue exactamente igual aquí debajo...)
 
         st.divider()
         st.subheader("📍 Valor VTEC Global de un punto (Datos IONEX)")
