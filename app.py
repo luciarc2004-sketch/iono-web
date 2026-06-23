@@ -29,7 +29,7 @@ st.set_page_config(page_title="Portal de Monitoreo Ionosférico", layout="wide")
 # =====================================================================
 MINUTOS_CONTIGUOS_GLOBAL = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
 VMIN_TECU_FIJO = 0.0
-VMAX_TECU_FIJO = 100.0
+VMAX_TECU_FIJO = 60.0
 
 # Definición de la mallas estricta de Europa (Versión A)
 LAT_MIN, LAT_MAX, DELTA_LAT = 30, 72, 1
@@ -705,17 +705,21 @@ with tab3:
                     st.session_state.ciudades_lista = [] # Reseteamos ciudades al cambiar de datos
                     st.success(f"📊 Rango temporal procesado con éxito ({st.session_state.fuente_activa_t3}).")
 
-        # 4. Bloque de Visualización Dinámica
-        if st.session_state.historial_vtec_3d is not None:
-            es_ionex = st.session_state.fuente_activa_t3 == "IONEX"
+       # 4. Bloque de Visualización Dinámica
+        if st.session_state.h_historial_vtec_3d is not None:
+            es_ionex_d = st.session_state.h_fuente_activa == "IONEX"
             
-            ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
-            if ajuste_local_t3_dias:
-                vmin_d = max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d) - 2)))
-                vmax_d = float(np.ceil(np.max(st.session_state.historial_vtec_3d) + 2))
+            ajuste_local_t3_horas = st.toggle("🔍 Optimizar rango de color al Máx/Mín real de estas 24 horas", key="toggle_t3_horas")
+            
+            # --- CORRECCIÓN DE SATURACIÓN ---
+            if ajuste_local_t3_horas:
+                vmin_d = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d))))
+                vmax_d = float(np.ceil(np.max(st.session_state.h_historial_vtec_3d)))
             else:
-                vmin_d, vmax_d = 0.0, 60.0 # VMIN_TECU_FIJO / VMAX_TECU_FIJO
-
+                # Si es el mapa global IONEX, ampliamos el techo para no saturar el Ecuador.
+                vmin_d = 0.0
+                vmax_d = 120.0 if es_ionex_d else 60.0 
+            # --------------------------------
             # --- REPRODUCTOR ÚNICO REGULABLE ---
             st.subheader("🎬 Reproductor de Evolución Diaria")
             velocidad_frames_d = st.slider("⚡ Rapidez del paso de frames (segundos por mapa):", 0.1, 1.5, 0.5, 0.1, key="slider_velocidad_d")
@@ -936,17 +940,21 @@ with tab3:
                     st.session_state.h_ciudades_lista = [] # Reseteamos ciudades si cambiamos de día/fuente
                     st.success(f"📊 ¡Éxito! 24 mapas de {st.session_state.h_fuente_activa} cargados en memoria.")
 
-        # 4. Bloque de Visualización Dinámica
+       # 4. Bloque de Visualización Dinámica
         if st.session_state.h_historial_vtec_3d is not None:
             es_ionex_h = st.session_state.h_fuente_activa == "IONEX"
             
             ajuste_local_t3_horas = st.toggle("🔍 Optimizar rango de color al Máx/Mín real de estas 24 horas", key="toggle_t3_horas")
+            
+            # --- CORRECCIÓN DE SATURACIÓN ---
             if ajuste_local_t3_horas:
-                vmin_h = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d) - 2)))
-                vmax_h = float(np.ceil(np.max(st.session_state.h_historial_vtec_3d) + 2))
+                vmin_h = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d))))
+                vmax_h = float(np.ceil(np.max(st.session_state.h_historial_vtec_3d)))
             else:
-                vmin_h, vmax_h = 0.0, 60.0 # O usar tus variables de escala fija
-
+                # Si es el mapa global IONEX, ampliamos el techo para no saturar el Ecuador.
+                vmin_h = 0.0
+                vmax_h = 120.0 if es_ionex_h else 60.0 
+            # --------------------------------
             # --- REPRODUCTOR ÚNICO REGULABLE ---
             st.subheader("🎬 Reproductor de Evolución Horaria")
             velocidad_frames_h = st.slider("⚡ Rapidez del paso de frames (segundos por mapa):", 0.1, 1.5, 0.5, 0.1, key="slider_velocidad_h")
