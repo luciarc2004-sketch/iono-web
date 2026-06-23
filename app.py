@@ -1568,13 +1568,13 @@ with tab4:
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
 
 # =====================================================================
-# PESTAÑA 5: DESVIACIONES DEL MODELO E INCERTIDUMBRE (DLR EXCLUSIVO)
+# PESTAÑA 5: DESVIACIONES DEL MODELO 
 # =====================================================================
 with tab5:
     st.title("📉 Desviaciones e Incertidumbre")
     st.divider()
 
-    # Variables de estado de sesión
+    # Variables de estado de sesión persistentes para evitar descargas duplicadas
     if 'p5_historial_real_3d' not in st.session_state:
         st.session_state.p5_historial_real_3d = None
         st.session_state.p5_historial_rms_3d = None
@@ -1583,7 +1583,7 @@ with tab5:
         st.session_state.p5_etiquetas_fechas_reales = []
         st.session_state.p5_fecha_info = ""
 
-    # Tabla física de frecuencias
+    # Tabla física de frecuencias de las señales base
     FRECUENCIAS_GNSS_P5 = {
         "GPS (L1 - 1575.42 MHz)": 1575.42 * 1e6,
         "Galileo (E1 - 1575.42 MHz)": 1575.42 * 1e6,
@@ -1598,11 +1598,11 @@ with tab5:
     p5_constelacion = col_v2.selectbox("📡 Señal GNSS de Referencia:", list(FRECUENCIAS_GNSS_P5.keys()), key="p5_select_freq")
     p5_hora_vista = col_v3.slider("Hora de Observación Estática (UTC):", 0, 23, 13, key="p5_hour_static")
 
-    # Factor de conversión unificado
+    # Factor de conversión unificado de la ecuación física de refracción
     f_hz_p5 = FRECUENCIAS_GNSS_P5[p5_constelacion]
     FACTOR_METROS_P5 = (40.3 / (f_hz_p5 ** 2)) * 1e16
 
-    if st.button("🚀 Procesar Bloque Completo (24 Horas)", key="p5_btn_process"):
+    if st.button("🚀 Procesar Bloque Completo (24 Horas Consecutivas)", key="p5_btn_process"):
         with st.spinner("Sincronizando claves multi-variable con el servidor del DLR..."):
             headers = {"User-Agent": "Mozilla/5.0"}
             
@@ -1614,8 +1614,10 @@ with tab5:
 
             for h in range(24):
                 link_exitoso = False
+                minuto_exitoso = 0
                 data_instante = None
                 
+                # Bucle de contingencia temporal en pasos de 5 min
                 for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]:
                     url_intento = generar_enlace_dlr_seguro(p5_fecha.year, p5_fecha.month, p5_fecha.day, h, m)
                     try:
@@ -1623,6 +1625,7 @@ with tab5:
                         if response.status_code == 200:
                             data_instante = response.json()
                             link_exitoso = True
+                            minuto_exitoso = m
                             break
                     except Exception: pass
 
@@ -1632,28 +1635,25 @@ with tab5:
                     break
 
                 real_list, rms_list, model_list = [], [], []
-                if data_instante and 'data' in data_instante and 'grid' in data_instante['data']:
-                    for feature in data_instante['data']['grid'].get('features', []):
-                        props = feature.get('properties', {})
-                        real_list.append(props.get('vtec_assimilated_tecu', 0))
-                        rms_list.append(props.get('vtec_rms_tecu', 0))
-                        model_list.append(props.get('vtec_model_tecu', 0))
+                if 'data' in data_instante and 'grid' in data_instante['data'] and 'features' in data_instante['data']['grid']:
+                    for feature in data_instante['data']['grid']['features']:
+                        if 'properties' in feature:
+                            props = feature['properties']
+                            if 'vtec_assimilated_tecu' in props and 'vtec_rms_tecu' in props and 'vtec_model_tecu' in props:
+                                real_list.append(props['vtec_assimilated_tecu'])
+                                rms_list.append(props['vtec_rms_tecu'])
+                                model_list.append(props['vtec_model_tecu'])
 
-                # BLINDAJE ESTRICTO CONTRA EL 'VALUE ERROR' DE MATRICES INCOMPLETAS (43*81 = 3483 puntos)
-                if len(real_list) == 3483:
-                    try:
-                        temp_real_3d[h, :, :] = np.array(real_list).reshape(43, 81) * FACTOR_METROS_P5
-                        temp_rms_3d[h, :, :] = np.array(rms_list).reshape(43, 81) * FACTOR_METROS_P5
-                        temp_model_3d[h, :, :] = np.array(model_list).reshape(43, 81) * FACTOR_METROS_P5
-                        temp_etiquetas.append(f"{h:02d}:00")
-                    except Exception as e:
-                        st.error(f"❌ Error interno procesando la matriz de la hora {h:02d}:00 - {e}")
-                        exito_total_p5 = False
-                        break
-                else:
-                    st.error(f"❌ La cuadrícula del DLR está corrupta o incompleta a las {h:02d}:00 (Puntos válidos: {len(real_list)}/3483). Abortado.")
+                if len(real_list) != 43 * 81:
+                    st.error(f"❌ Estructura de cuadrícula asimétrica o incompleta en la hora {h:02d}.")
                     exito_total_p5 = False
                     break
+
+                # Conversión y almacenamiento directo en metros reales
+                temp_real_3d[h, :, :] = np.array(real_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_rms_3d[h, :, :] = np.array(rms_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_model_3d[h, :, :] = np.array(model_list).reshape(43, 81) * FACTOR_METROS_P5
+                temp_etiquetas.append(f"{h:02d}:{minuto_exitoso:02d}")
 
             if exito_total_p5:
                 st.session_state.p5_historial_real_3d = temp_real_3d
@@ -1664,7 +1664,7 @@ with tab5:
                 st.session_state.p5_fecha_info = f"{p5_fecha.strftime('%d/%m/%Y')} - {p5_constelacion}"
                 st.success("📊 Repositorio multi-variable cargado correctamente en memoria.")
 
-    # MENÚ SECUNDARIO INTERNO
+    # MENÚ SECUNDARIO INTERNO PARA SEPARAR LOS PILARES SOLICITADOS
     if st.session_state.p5_historial_real_3d is not None:
         st.divider()
         st.subheader("🎯 Panel de Control de Auditoría Avanzada")
@@ -1676,8 +1676,9 @@ with tab5:
             horizontal=True, key="radio_sub_p5"
         )
         
+        # Sistema dual alternativo de entrada de localización común para la pestaña
         st.markdown("#### 📍 Punto de Control e Intermediación")
-        p5_tipo_pos = st.radio("Método de entrada de localización:", ["Buscar por Nombre", "Introducir Coordenadas Manuales"], horizontal=True, key="p5_pos_radio")
+        p5_tipo_pos = st.radio("Método de entrada de localización para control:", ["Buscar por Nombre", "Introducir Coordenadas Manuales"], horizontal=True, key="p5_pos_radio")
         
         lat_v, lon_v, label_v = None, None, ""
         if p5_tipo_pos == "Buscar por Nombre":
@@ -1737,20 +1738,22 @@ with tab5:
             ax_p5_d.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
             ax_p5_d.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
             
-            ax_p5_d.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-            ax_p5_d.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-            ax_p5_d.grid(True, color='gray', alpha=0.3, linestyle='--')
+            grid_d = ax_p5_d.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+            grid_d.top_labels, grid_d.right_labels = False, False
+            grid_d.xformatter, grid_d.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
             mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
                                         transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
             
+            # CORRECCIÓN 1: Barra vertical y pad ajustado para que no aplaste el mapa
             plt.colorbar(mapa_d, ax=ax_p5_d, orientation='vertical', pad=0.02, aspect=35).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
-            ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC", fontsize=10, weight='bold')
+            ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC\n[Blanco = Coincidencia | Rojo = Sobreestima | Azul = Subestima]", fontsize=10, weight='bold')
             
-            plt.tight_layout()
+            plt.tight_layout() # CORRECCIÓN 2: Forzar balance de márgenes estricto
             st.pyplot(fig_p5_d)
             plt.close(fig_p5_d)
 
+            # Reproductor dinámico - CORREGIDO CON PROYECCIÓN CARTOPY INTRADÍA
             st.subheader("🎬 Reproductor Dinámico de la Desviación (24 Horas)")
             if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
                 contenedor_p5_anim = st.empty()
@@ -1762,17 +1765,18 @@ with tab5:
                     ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
                     ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
                     
-                    ax_a.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-                    ax_a.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-                    ax_a.grid(True, color='gray', alpha=0.3, linestyle='--')
+                    grid_a = ax_a.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+                    grid_a.top_labels, grid_a.right_labels = False, False
+                    grid_a.xformatter, grid_a.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
                     
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
                     
+                    # CORRECCIÓN 3: Barra vertical en el reproductor animado también
                     plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('DESVIACIÓN EN METROS', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
                     
-                    plt.tight_layout()
+                    plt.tight_layout() # CORRECCIÓN 4: Forzar márgenes en el reproductor
                     contenedor_p5_anim.pyplot(fig_a)
                     plt.close(fig_a)
                     time.sleep(0.4)
@@ -1797,44 +1801,20 @@ with tab5:
             ax_p5_r.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
             ax_p5_r.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
             
-            ax_p5_r.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-            ax_p5_r.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-            ax_p5_r.grid(True, color='gray', alpha=0.3, linestyle='--')
+            grid_r = ax_p5_r.gridlines(draw_labels=True, color='gray', alpha=0.15, linestyle='--')
+            grid_r.top_labels, grid_r.right_labels = False, False
+            grid_r.xformatter, grid_r.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
             mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
                                         transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
             
+            # CORRECCIÓN 5: Barra vertical y pad estrecho para el mapa de incertidumbre RMS
             plt.colorbar(mapa_r, ax=ax_p5_r, orientation='vertical', pad=0.02, aspect=35).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
-            ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC", fontsize=10, weight='bold')
+            ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
             
-            plt.tight_layout()
+            plt.tight_layout() # CORRECCIÓN 6: Forzar márgenes finales del pilar 2
             st.pyplot(fig_p5_r)
             plt.close(fig_p5_r)
-            
-            st.subheader("🎬 Reproductor Dinámico RMS (24 Horas)")
-            if st.button("▶️ Reproducir Evolución RMS", key="btn_play_p5_rms"):
-                contenedor_p5_rms = st.empty()
-                for f in range(24):
-                    fig_a = plt.figure(figsize=(11, 6), dpi=100)
-                    ax_a = plt.axes(projection=ccrs.PlateCarree())
-                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                    ax_a.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                    
-                    ax_a.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-                    ax_a.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-                    ax_a.grid(True, color='gray', alpha=0.3, linestyle='--')
-
-                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[f, :, :], 
-                                             transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
-                    
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('METROS RMS', weight='bold')
-                    ax_a.set_title(f"FRAME HORARIO RMS: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
-                    
-                    plt.tight_layout()
-                    contenedor_p5_rms.pyplot(fig_a)
-                    plt.close(fig_a)
-                    time.sleep(0.4)
 
 
 
