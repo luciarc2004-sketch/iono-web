@@ -1566,6 +1566,8 @@ with tab4:
             st.info("### 📡 Telemetría de Proyección de Contenido Electrónico Futuro:")
             for idx, f_fut in enumerate(st.session_state.p4_fechas_futuro):
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
+
+
 # =====================================================================
 # PESTAÑA 5: DESVIACIONES DEL MODELO 
 # =====================================================================
@@ -1721,7 +1723,6 @@ with tab5:
         if "Pilar 1" in sub_seccion_p5:
             st.write(f"### 📉 Análisis de Residuos: Modelo Teórico menos Valor Real")
             
-            # Configuración de límites fijos simétricos para la paleta divergente 'seismic'
             if p5_toggle_color:
                 lim_abs = float(np.max(np.abs(st.session_state.p5_historial_desviacion_3d[p5_hora_vista])))
                 vmin_p5, vmax_p5 = -lim_abs, lim_abs
@@ -1743,9 +1744,13 @@ with tab5:
             grid_d.xformatter, grid_d.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
             mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
-                                         transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
-            plt.colorbar(mapa_d, ax=ax_p5_d, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
+                                        transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+            
+            # CORRECCIÓN 1: Barra vertical y pad ajustado para que no aplaste el mapa
+            plt.colorbar(mapa_d, ax=ax_p5_d, orientation='vertical', pad=0.02, aspect=35).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
             ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC\n[Blanco = Coincidencia | Rojo = Sobreestima | Azul = Subestima]", fontsize=10, weight='bold')
+            
+            plt.tight_layout() # CORRECCIÓN 2: Forzar balance de márgenes estricto
             st.pyplot(fig_p5_d)
             plt.close(fig_p5_d)
 
@@ -1766,14 +1771,17 @@ with tab5:
                     grid_a.xformatter, grid_a.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
                     
                     mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
-                                              transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('DESVIACIÓN EN METROS', weight='bold')
+                                             transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+                    
+                    # CORRECCIÓN 3: Barra vertical en el reproductor animado también
+                    plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('DESVIACIÓN EN METROS', weight='bold')
                     ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
                     
+                    plt.tight_layout() # CORRECCIÓN 4: Forzar márgenes en el reproductor
                     contenedor_p5_anim.pyplot(fig_a)
                     plt.close(fig_a)
                     time.sleep(0.4)
-
+                    
         # =====================================================================
         # DESPLIEGUE DEL PILAR 2: INCERTIDUMBRE DEL DATO
         # =====================================================================
@@ -1799,11 +1807,17 @@ with tab5:
             grid_r.xformatter, grid_r.yformatter = LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 
             mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
-                                         transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
-            plt.colorbar(mapa_r, ax=ax_p5_r, orientation='horizontal', pad=0.08, shrink=0.7).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
+                                        transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
+            
+            # CORRECCIÓN 5: Barra vertical y pad estrecho para el mapa de incertidumbre RMS
+            plt.colorbar(mapa_r, ax=ax_p5_r, orientation='vertical', pad=0.02, aspect=35).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
             ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
+            
+            plt.tight_layout() # CORRECCIÓN 6: Forzar márgenes finales del pilar 2
             st.pyplot(fig_p5_r)
             plt.close(fig_p5_r)
+
+
 
 # =====================================================================
 # PESTAÑA 6: COMENTARIOS Y FEEDBACK 
