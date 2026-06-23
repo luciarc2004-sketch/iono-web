@@ -705,25 +705,21 @@ with tab3:
                     st.session_state.ciudades_lista = [] # Reseteamos ciudades al cambiar de datos
                     st.success(f"📊 Rango temporal procesado con éxito ({st.session_state.fuente_activa_t3}).")
 
-       # 4. Bloque de Visualización Dinámica
+        # 4. Bloque de Visualización Dinámica
         if st.session_state.historial_vtec_3d is not None:
-            
-            # --- LÍNEA QUE FALTA ---
             es_ionex = st.session_state.fuente_activa_t3 == "IONEX"
-            # -----------------------
             
-            ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín...", key="toggle_t3_dias")
+            ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
             
-            # (El resto del código sigue igual...)
-            # --- CORRECCIÓN DE SATURACIÓN ---
-            if ajuste_local_t3_horas:
-                vmin_d = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d))))
-                vmax_d = float(np.ceil(np.max(st.session_state.h_historial_vtec_3d)))
+            # --- CORRECCIÓN DE SATURACIÓN (VERSIÓN DÍAS) ---
+            if ajuste_local_t3_dias:
+                vmin_d = max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d))))
+                vmax_d = float(np.ceil(np.max(st.session_state.historial_vtec_3d)))
             else:
-                # Si es el mapa global IONEX, ampliamos el techo para no saturar el Ecuador.
+                # Si es el mapa global IONEX, ampliamos el techo a 120 para no saturar el Ecuador.
                 vmin_d = 0.0
-                vmax_d = 120.0 if es_ionex_d else 60.0 
-            # --------------------------------
+                vmax_d = 120.0 if es_ionex else 60.0 
+            # -----------------------------------------------    
             # --- REPRODUCTOR ÚNICO REGULABLE ---
             st.subheader("🎬 Reproductor de Evolución Diaria")
             velocidad_frames_d = st.slider("⚡ Rapidez del paso de frames (segundos por mapa):", 0.1, 1.5, 0.5, 0.1, key="slider_velocidad_d")
