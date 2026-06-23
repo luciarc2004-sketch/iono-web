@@ -452,20 +452,30 @@ with tab2:
     if st.session_state.matriz_ionex is not None:
         st.divider()
         
-        # Volvemos a las proporciones de tu script original (14x7)
         fig_i = plt.figure(figsize=(14, 7), dpi=100)
         ax_i = plt.axes(projection=ccrs.PlateCarree())
+        
+        # --- EL TRUCO PARA EVITAR EL CRASH DE SHAPELY ---
+        # Usamos 179.99 y 89.99 en lugar de los valores exactos para no romper la geometría de la cuadrícula.
+        ax_i.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
+        # -------------------------------------------------
         
         # Añadimos costas y fronteras
         ax_i.add_feature(cfeature.COASTLINE, linewidth=0.8, edgecolor='black', zorder=3)
         ax_i.add_feature(cfeature.BORDERS, linestyle=':', alpha=0.5, zorder=3)
         
-        # Usamos contourf exactamente igual que en tu script local
-        mapa_i = ax_i.contourf(st.session_state.lons_ionex, st.session_state.lats_ionex, 
-                               st.session_state.matriz_ionex, levels=60, cmap='jet', 
+        # --- EL TRUCO PARA QUE CONTOURF DIBUJE LOS COLORES ---
+        # Matplotlib necesita que las latitudes crezcan de Sur a Norte.
+        lats_plot = st.session_state.lats_ionex[::-1]
+        matriz_plot = st.session_state.matriz_ionex[::-1, :]
+        # -----------------------------------------------------
+        
+        # Usamos contourf con las variables corregidas
+        mapa_i = ax_i.contourf(st.session_state.lons_ionex, lats_plot, 
+                               matriz_plot, levels=60, cmap='jet', 
                                transform=ccrs.PlateCarree(), zorder=2)
         
-        # BARRA VERTICAL: Esto es clave para que Cartopy no aplaste el mapa en Streamlit
+        # BARRA VERTICAL: Evita que el mapa se aplaste
         cbar_i = plt.colorbar(mapa_i, ax=ax_i, orientation='vertical', pad=0.02, aspect=40)
         cbar_i.set_label('Contenido Total de Electrones (TECU)', fontsize=12, weight='bold')
         
@@ -478,6 +488,9 @@ with tab2:
         plt.tight_layout() # Obliga a recalcular y respetar los márgenes
         st.pyplot(fig_i)
         plt.close(fig_i)
+
+        # --- BUSCADOR INTERACTIVO DE PUNTOS GLOBALES IONEX ---
+        # (Asegúrate de dejar debajo de esto el código del buscador de puntos que ya tenías)
 
         # --- BUSCADOR INTERACTIVO DE PUNTOS GLOBALES IONEX ---
         # (El resto del código del buscador sigue exactamente igual aquí debajo...)
