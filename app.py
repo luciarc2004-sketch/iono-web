@@ -717,7 +717,7 @@ with tab3:
                 vmax_d = 120.0 if es_ionex else 60.0 
             
             # --- NUEVA SECCIÓN: MOSAICO DE EVOLUCIÓN INTERDIARIA ---
-            st.subheader("🧩 Mosaico de Evolución Temporal (Malla Comparativa)")
+            st.subheader(" Mosaico de Evolución Temporal (Malla Comparativa)")
             
             num_plots = len(st.session_state.etiquetas_fechas_reales)
             # Definimos dinámicamente las columnas para que la rejilla sea simétrica y estética
@@ -845,7 +845,7 @@ with tab3:
                 st.pyplot(fig_lineas)
                 plt.close(fig_lineas)
 # =====================================================================
-    # BLOQUE 2: POR HORAS (24H ÚNICO DÍA - REPRODUCTOR DUAL DLR/IONEX)
+    # BLOQUE 2: POR HORAS (24H ÚNICO DÍA - MOSAICO DUAL DLR/IONEX)
     # =====================================================================
     elif modo_evolucion == "Por Horas (24h Único Día)":
         st.subheader("⏱️ Análisis de Evolución Intradía (Hora por Hora - 24h)")
@@ -934,7 +934,7 @@ with tab3:
                                 
                             if "EPOCH OF CURRENT MAP" in linea and leyendo_tec:
                                 hora_actual = int(linea.split()[3])
-                                lat_idx = 0 # Reset para el nuevo mapa horario
+                                lat_idx = 0 
                                 
                             if leyendo_tec and hora_actual is not None and hora_actual < 24 and "LAT/LON1/LON2/DLON/H" in linea:
                                 valores = []
@@ -945,14 +945,12 @@ with tab3:
                                         val = lin_d[j:j+5].strip()
                                         if val: valores.append(int(val))
                                     offset += 1
-                                # Guardamos directamente invirtiendo la fila para que crezca de Sur a Norte
                                 h_temp_3d[hora_actual, (len(lats_i)-1) - lat_idx, :] = np.array(valores) * (10**exponente)
                                 lat_idx += 1
                                 
                         os.remove(tmp_gz)
                         os.remove(tmp_txt)
                         
-                        # Comprobación de integridad
                         if np.sum(h_temp_3d[0]) == 0: raise ValueError("Archivo IONEX vacío o formato corrupto.")
                             
                     except Exception as e:
@@ -963,7 +961,7 @@ with tab3:
 
                     if h_exito_total:
                         st.session_state.h_fuente_activa = "IONEX"
-                        st.session_state.h_eje_lats = lats_i[::-1] # Guardar eje de Sur a Norte
+                        st.session_state.h_eje_lats = lats_i[::-1] 
                         st.session_state.h_eje_lons = lons_i
 
                 # --- GUARDADO EN MEMORIA ---
@@ -971,10 +969,10 @@ with tab3:
                     st.session_state.h_historial_vtec_3d = h_temp_3d
                     st.session_state.h_etiquetas_reales = h_temp_etiquetas
                     st.session_state.h_matriz_maximos = np.max(h_temp_3d, axis=0)
-                    st.session_state.h_ciudades_lista = [] # Reseteamos ciudades si cambiamos de día/fuente
+                    st.session_state.h_ciudades_lista = [] 
                     st.success(f"📊 ¡Éxito! 24 mapas de {st.session_state.h_fuente_activa} cargados en memoria.")
 
-       # 4. Bloque de Visualización Dinámica
+        # 4. Bloque de Visualización Dinámica (Mosaico)
         if st.session_state.h_historial_vtec_3d is not None:
             es_ionex_h = st.session_state.h_fuente_activa == "IONEX"
             
@@ -985,57 +983,82 @@ with tab3:
                 vmin_h = max(0.0, float(np.floor(np.min(st.session_state.h_historial_vtec_3d))))
                 vmax_h = float(np.ceil(np.max(st.session_state.h_historial_vtec_3d)))
             else:
-                # Si es el mapa global IONEX, ampliamos el techo para no saturar el Ecuador.
                 vmin_h = 0.0
                 vmax_h = 120.0 if es_ionex_h else 60.0 
-            # --------------------------------
-            # --- REPRODUCTOR ÚNICO REGULABLE ---
-            st.subheader("🎬 Reproductor de Evolución Horaria")
-            velocidad_frames_h = st.slider("⚡ Rapidez del paso de frames (segundos por mapa):", 0.1, 1.5, 0.5, 0.1, key="slider_velocidad_h")
 
-            if st.button("▶️ Iniciar Animación Automática", key="btn_play_horas_simple"):
-                contenedor_horas_anim = st.empty()
-                for f in range(24):
-                    fig_a = plt.figure(figsize=(14, 7) if es_ionex_h else (10, 6), dpi=100)
-                    ax_a = plt.axes(projection=ccrs.PlateCarree())
-                    
-                    if es_ionex_h: ax_a.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
-                    else: ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                    
-                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                    
-                    mesh_lon, mesh_lat = np.meshgrid(st.session_state.h_eje_lons, st.session_state.h_eje_lats)
-                    mapa_a = ax_a.pcolormesh(mesh_lon, mesh_lat, st.session_state.h_historial_vtec_3d[f, :, :], 
-                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h, zorder=2)
-                    
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal' if not es_ionex_h else 'vertical', pad=0.08 if not es_ionex_h else 0.02, shrink=0.7 if not es_ionex_h else 1.0, aspect=40).set_label('VTEC (TECU)', weight='bold')
-                    ax_a.set_title(f"FRAME HORARIO: {st.session_state.h_etiquetas_reales[f]} UTC", fontsize=12, weight='bold', pad=10)
-                    
-                    if es_ionex_h: plt.tight_layout() # Previene solapamientos en mapas globales
-                    contenedor_horas_anim.pyplot(fig_a)
-                    plt.close(fig_a)
-                    time.sleep(velocidad_frames_h)
+            # --- NUEVA SECCIÓN: MOSAICO DE EVOLUCIÓN INTRADÍA (24h) ---
+            st.subheader("🧩 Mosaico de Evolución Temporal (Ciclo de 24 Horas)")
+            
+            ncols = 6
+            nrows = 4
+            
+            # Dimensiones ajustadas: más anchas para mapamundi, más cuadradas para Europa
+            w_sub = 3.5 if es_ionex_h else 2.8
+            h_sub = 2.0 if es_ionex_h else 2.5
+            
+            fig_mosaic_h, axes_h = plt.subplots(nrows, ncols, figsize=(w_sub * ncols, h_sub * nrows), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+            axes_h = axes_h.flatten()
+            
+            mesh_lon, mesh_lat = np.meshgrid(st.session_state.h_eje_lons, st.session_state.h_eje_lats)
+            ultimo_mapeo_h = None
+            
+            for f in range(24):
+                ax_sub = axes_h[f]
                 
-                st.success("🏁 Reproducción completada.")
+                if es_ionex_h:
+                    ax_sub.set_global()
+                    # Marcas seguras y simples para evitar el error de Shapely
+                    ax_sub.set_xticks([-180, 0, 180], crs=ccrs.PlateCarree())
+                    ax_sub.set_yticks([-90, 0, 90], crs=ccrs.PlateCarree())
+                else:
+                    ax_sub.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_sub.set_xticks([float(LON_MIN), (float(LON_MIN)+float(LON_MAX))/2, float(LON_MAX)], crs=ccrs.PlateCarree())
+                    ax_sub.set_yticks([float(LAT_MIN), float(LAT_MAX)], crs=ccrs.PlateCarree())
+                
+                ax_sub.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                ax_sub.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                ax_sub.add_feature(cfeature.COASTLINE, edgecolor='#333333', linewidth=0.7, zorder=3)
+                ax_sub.grid(True, color='gray', alpha=0.2, linestyle='--')
+                ax_sub.tick_params(labelsize=6)
+                
+                ultimo_mapeo_h = ax_sub.pcolormesh(mesh_lon, mesh_lat, st.session_state.h_historial_vtec_3d[f, :, :], 
+                                                   transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h, zorder=2)
+                
+                ax_sub.set_title(f"⏱️ {f:02d}:00 UTC", fontsize=9, weight='bold')
+            
+            # Barra de colores unificada debajo del mosaico completo
+            fig_mosaic_h.colorbar(ultimo_mapeo_h, ax=axes_h.tolist(), orientation='horizontal', shrink=0.5, pad=0.04).set_label('Escala de Densidad VTEC (TECU)', weight='bold', fontsize=10)
+            
+            st.pyplot(fig_mosaic_h)
+            plt.close(fig_mosaic_h)
 
             # --- MAPA DE MÁXIMOS ABSOLUTOS ---
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Día")
             fig_max_h, ax_mxh = plt.subplots(figsize=(14, 7) if es_ionex_h else (10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             
-            if es_ionex_h: ax_mxh.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
-            else: ax_mxh.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            if es_ionex_h:
+                ax_mxh.set_global()
+                ax_mxh.set_xticks([-180, -120, -60, 0, 60, 120, 180], crs=ccrs.PlateCarree())
+                ax_mxh.set_yticks([-90, -60, -30, 0, 30, 60, 90], crs=ccrs.PlateCarree())
+            else:
+                ax_mxh.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                ax_mxh.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+                ax_mxh.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
             
             ax_mxh.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             ax_mxh.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
             ax_mxh.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mxh.grid(True, color='gray', alpha=0.3, linestyle='--')
             
-            mesh_lon, mesh_lat = np.meshgrid(st.session_state.h_eje_lons, st.session_state.h_eje_lats)
             mapa_maximos_h = ax_mxh.pcolormesh(mesh_lon, mesh_lat, st.session_state.h_matriz_maximos, 
                                                transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h)
             
-            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal' if not es_ionex_h else 'vertical', pad=0.08 if not es_ionex_h else 0.02, shrink=0.7 if not es_ionex_h else 1.0, aspect=40).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
+            fig_max_h.colorbar(mapa_maximos_h, ax=ax_mxh, orientation='horizontal' if not es_ionex_h else 'vertical', 
+                               pad=0.08 if not es_ionex_h else 0.02, shrink=0.7 if not es_ionex_h else 1.0, aspect=40).set_label('PICO MÁXIMO HORARIO (TECU)', weight='bold')
+            
+            # Título dinámico
+            plt.title(f"Picos Máximos Absolutos — {fecha_analisis_h.strftime('%d/%m/%Y')} (Ciclo 24h Completo)", fontsize=11, weight='bold', pad=12)
+            
             if es_ionex_h: plt.tight_layout()
             st.pyplot(fig_max_h)
             plt.close(fig_max_h)
@@ -1078,7 +1101,11 @@ with tab3:
                 ax_lineas_h.set_xlim(-0.5, 23.5)
                 ax_lineas_h.set_xticks(range(24))
                 ax_lineas_h.set_xticklabels([f"{h:02d}h" for h in range(24)], rotation=45)
+                
+                # Título corregido
+                ax_lineas_h.set_title(f"Evolución de Intensidad TECU Intradía (24h) - {fecha_analisis_h.strftime('%d/%m/%Y')}", fontsize=11, weight='bold', pad=10)
                 ax_lineas_h.legend(loc="upper right")
+                
                 st.pyplot(fig_lineas_h)
                 plt.close(fig_lineas_h)
 # =====================================================================
