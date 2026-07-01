@@ -573,7 +573,7 @@ with tab3:
         key="radio_modo_evolucion_global"
     )
 # =====================================================================
-    # BLOQUE 1: POR DÍAS (HORA FIJA - REPRODUCTOR DUAL DLR/IONEX)
+    # BLOQUE 1: POR DÍAS (HORA FIJA - MOSAICO COMPARATIVO DUAL DLR/IONEX)
     # =====================================================================
     if modo_evolucion == "Por Días (Hora Fija)":
         st.subheader("📆 Análisis de Evolución Interdiaria (Hora Fija)")
@@ -589,14 +589,14 @@ with tab3:
             st.session_state.eje_lons_t3 = None
 
         # 2. Interfaz de Configuración
-        fuente_datos_t3 = st.radio("📡 Fuente de Datos:", ["🇪🇺 DLR (Regional Europa)", "🌍 IONEX (Planetario Global)"], horizontal=True)
+        fuente_datos_t3 = st.radio("📡 Fuente de Datos:", ["🇪🇺 DLR (Regional Europa)", "🌍 IONEX (Planetario Global)"], horizontal=True, key="radio_src_b1")
         
         col_c1, col_c2, col_c3 = st.columns(3)
         fecha_inicial = col_c1.date_input("Fecha Inicial:", datetime.date(2026, 2, 19), key="ev_fecha_ini")
         hora_fija_sel = col_c2.slider("Hora fija de observación (UTC):", 0, 23, 15, key="ev_hour_dias")
         num_dias_sel = col_c3.slider("Número de días a evaluar:", 2, 15, 10, key="ev_num_dias")
 
-        # 3. Motor Dual de Descarga
+        # 3. Motor Dual de Descarga y Extracción
         if st.button("🚀 Procesar Rango de Días", key="btn_ev_dias"):
             with st.spinner(f"Extrayendo Bloques Temporales desde {fuente_datos_t3}..."):
                 headers = {"User-Agent": "Mozilla/5.0"}
@@ -610,7 +610,6 @@ with tab3:
                         fecha_actual = fecha_inicial + datetime.timedelta(days=d)
                         link_exitoso = False
                         
-                        # MINUTOS_CONTIGUOS_GLOBAL es tu lista [0, 5, 10, 15...]
                         for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]: 
                             url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, hora_fija_sel, m)
                             try:
@@ -631,12 +630,11 @@ with tab3:
                     
                     if exito_total:
                         st.session_state.fuente_activa_t3 = "DLR"
-                        st.session_state.eje_lats_t3 = LATS_EUROPA # Asegúrate de que esta variable existe en tu app.py
+                        st.session_state.eje_lats_t3 = LATS_EUROPA 
                         st.session_state.eje_lons_t3 = LONS_EUROPA
 
                 # --- RUTA B: IONEX (GLOBAL) ---
                 else:
-                    # Configuración estándar de la malla IONEX
                     lats_i = np.arange(87.5, -87.6, -2.5)
                     lons_i = np.arange(-180.0, 180.1, 5.0)
                     temp_3d = np.zeros((num_dias_sel, len(lats_i), len(lons_i)))
@@ -646,7 +644,7 @@ with tab3:
                         year, doy = fecha_actual.strftime("%Y"), fecha_actual.strftime("%j")
                         url_ionex = f"http://ftp.aiub.unibe.ch/CODE/{year}/COD0OPSFIN_{year}{doy}0000_01D_01H_GIM.INX.gz"
                         
-                        tmp_gz, tmp_txt = "tmp_ev.INX.gz", "tmp_ev.inx"
+                        tmp_gz, tmp_txt = "tmp_ev_d.INX.gz", "tmp_ev_d.inx"
                         try:
                             urllib.request.urlretrieve(url_ionex, tmp_gz)
                             with gzip.open(tmp_gz, 'rb') as f_in, open(tmp_txt, 'wb') as f_out:
@@ -676,8 +674,6 @@ with tab3:
                                             val = lin_d[j:j+5].strip()
                                             if val: valores.append(int(val))
                                         offset += 1
-                                    # Aplicamos exponente e invertimos la matriz (Sur a Norte) sobre la marcha
-                                    # Llenamos la matriz de abajo hacia arriba para que coincida con latitudes ascendentes
                                     temp_3d[d, (len(lats_i)-1) - lat_idx, :] = np.array(valores) * (10**exponente)
                                     lat_idx += 1
                                     
@@ -690,81 +686,117 @@ with tab3:
                         except Exception as e:
                             st.error(f"❌ Error descargando IONEX del {fecha_actual.strftime('%d/%m/%Y')}: {e}")
                             exito_total = False
+                            if os.path.exists(tmp_gz): os.remove(tmp_gz)
+                            if os.path.exists(tmp_txt): os.remove(tmp_txt)
                             break
 
                     if exito_total:
                         st.session_state.fuente_activa_t3 = "IONEX"
-                        st.session_state.eje_lats_t3 = lats_i[::-1] # Guardamos lats de Sur a Norte
+                        st.session_state.eje_lats_t3 = lats_i[::-1] 
                         st.session_state.eje_lons_t3 = lons_i
 
-                # --- GUARDADO EN MEMORIA (Común para ambos) ---
+                # --- GUARDADO EN MEMORIA ---
                 if exito_total:
                     st.session_state.historial_vtec_3d = temp_3d
                     st.session_state.etiquetas_fechas_reales = temp_etiquetas
                     st.session_state.matriz_maximos = np.max(temp_3d, axis=0)
-                    st.session_state.ciudades_lista = [] # Reseteamos ciudades al cambiar de datos
+                    st.session_state.ciudades_lista = [] 
                     st.success(f"📊 Rango temporal procesado con éxito ({st.session_state.fuente_activa_t3}).")
 
-        # 4. Bloque de Visualización Dinámica
+        # 4. Bloque de Visualización Dinámica (Mosaico Completo)
         if st.session_state.historial_vtec_3d is not None:
             es_ionex = st.session_state.fuente_activa_t3 == "IONEX"
+            fecha_final_calc = fecha_inicial + datetime.timedelta(days=num_dias_sel - 1)
             
             ajuste_local_t3_dias = st.toggle("🔍 Optimizar rango de color al Máx/Mín de este bloque de días", key="toggle_t3_dias")
-            
-            # --- CORRECCIÓN DE SATURACIÓN (VERSIÓN DÍAS) ---
             if ajuste_local_t3_dias:
                 vmin_d = max(0.0, float(np.floor(np.min(st.session_state.historial_vtec_3d))))
                 vmax_d = float(np.ceil(np.max(st.session_state.historial_vtec_3d)))
             else:
-                # Si es el mapa global IONEX, ampliamos el techo a 120 para no saturar el Ecuador.
                 vmin_d = 0.0
                 vmax_d = 120.0 if es_ionex else 60.0 
-            # -----------------------------------------------    
-            # --- REPRODUCTOR ÚNICO REGULABLE ---
-            st.subheader("🎬 Reproductor de Evolución Diaria")
-            velocidad_frames_d = st.slider("⚡ Rapidez del paso de frames (segundos por mapa):", 0.1, 1.5, 0.5, 0.1, key="slider_velocidad_d")
-
-            if st.button("▶️ Iniciar Animación Automática", key="btn_play_dias_simple"):
-                contenedor_dias_anim = st.empty()
-                for f in range(len(st.session_state.etiquetas_fechas_reales)):
-                    fig_a = plt.figure(figsize=(12, 6) if es_ionex else (10, 6), dpi=100)
-                    ax_a = plt.axes(projection=ccrs.PlateCarree())
-                    
-                    if es_ionex: ax_a.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
-                    else: ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree()) # Asegúrate de que LON_MIN etc. existan
-                    
-                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                    
-                    mesh_lon, mesh_lat = np.meshgrid(st.session_state.eje_lons_t3, st.session_state.eje_lats_t3)
-                    mapa_a = ax_a.pcolormesh(mesh_lon, mesh_lat, st.session_state.historial_vtec_3d[f, :, :], 
-                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d, zorder=2)
-                    
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
-                    ax_a.set_title(f"FRAME DIARIO: {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
-                    
-                    contenedor_dias_anim.pyplot(fig_a)
-                    plt.close(fig_a)
-                    time.sleep(velocidad_frames_d)
+            
+            # --- NUEVA SECCIÓN: MOSAICO DE EVOLUCIÓN INTERDIARIA ---
+            st.subheader("🧩 Mosaico de Evolución Temporal (Malla Comparativa)")
+            
+            num_plots = len(st.session_state.etiquetas_fechas_reales)
+            # Definimos dinámicamente las columnas para que la rejilla sea simétrica y estética
+            if num_plots <= 4: ncols = num_plots
+            elif num_plots <= 8: ncols = 4
+            else: ncols = 5
+            
+            nrows = int(np.ceil(num_plots / ncols))
+            
+            # Dimensiones proporcionales según la fuente (IONEX requiere lienzos más anchos por ser cilíndrico)
+            w_sub = 4.5 if es_ionex else 3.8
+            h_sub = 2.8 if es_ionex else 2.5
+            
+            fig_mosaic, axes = plt.subplots(nrows, ncols, figsize=(w_sub * ncols, h_sub * nrows), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+            axes = np.array([axes]).flatten() if num_plots == 1 else np.array(axes).flatten()
+            
+            mesh_lon, mesh_lat = np.meshgrid(st.session_state.eje_lons_t3, st.session_state.eje_lats_t3)
+            ultimo_mapeo = None
+            
+            for f in range(num_plots):
+                ax_sub = axes[f]
+                if es_ionex:
+                    ax_sub.set_global()
+                    ax_sub.set_xticks([-180, 0, 180], crs=ccrs.PlateCarree())
+                    ax_sub.set_yticks([-90, 0, 90], crs=ccrs.PlateCarree())
+                else:
+                    ax_sub.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                    ax_sub.set_xticks([float(LON_MIN), (float(LON_MIN)+float(LON_MAX))/2, float(LON_MAX)], crs=ccrs.PlateCarree())
+                    ax_sub.set_yticks([float(LAT_MIN), float(LAT_MAX)], crs=ccrs.PlateCarree())
                 
-                st.success("🏁 Reproducción completada.")
+                ax_sub.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                ax_sub.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                ax_sub.add_feature(cfeature.COASTLINE, edgecolor='#333333', linewidth=0.7, zorder=3)
+                ax_sub.grid(True, color='gray', alpha=0.2, linestyle='--')
+                ax_sub.tick_params(labelsize=7)
+                
+                ultimo_mapeo = ax_sub.pcolormesh(mesh_lon, mesh_lat, st.session_state.historial_vtec_3d[f, :, :], 
+                                                 transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d, zorder=2)
+                
+                # CORRECCIÓN DE TÍTULO: Cada casilla lleva su día y hora exacta
+                ax_sub.set_title(f"📅 {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=9, weight='bold')
+            
+            # Limpiamos los cuadrantes sobrantes de la malla si el número de días no es múltiplo exacto
+            for j in range(num_plots, len(axes)):
+                fig_mosaic.delaxes(axes[j])
+            
+            # Agregamos una única barra de colores unificada debajo de la malla para todo el mosaico
+            fig_mosaic.colorbar(ultimo_mapeo, ax=axes.tolist(), orientation='horizontal', shrink=0.5, pad=0.06).set_label('Escala de Densidad VTEC (TECU)', weight='bold', fontsize=10)
+            
+            st.pyplot(fig_mosaic)
+            plt.close(fig_mosaic)
 
             # --- MAPA DE MÁXIMOS ABSOLUTOS ---
+            # CORRECCIÓN DE TÍTULO: Rango completo y hora explícita
             st.subheader("📌 Mapa Fijo de Máximos Absolutos Registrados")
-            fig_max, ax_mx = plt.subplots(figsize=(12, 6) if es_ionex else (10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            fig_max, ax_mx = plt.subplots(figsize=(14, 7) if es_ionex else (10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
             
-            if es_ionex: ax_mx.set_extent([-179.99, 179.99, -89.99, 89.99], crs=ccrs.PlateCarree())
-            else: ax_mx.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            if es_ionex:
+                ax_mx.set_global()
+                ax_mx.set_xticks([-180, -120, -60, 0, 60, 120, 180], crs=ccrs.PlateCarree())
+                ax_mx.set_yticks([-90, -60, -30, 0, 30, 60, 90], crs=ccrs.PlateCarree())
+            else:
+                ax_mx.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                ax_mx.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+                ax_mx.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
             
             ax_mx.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             ax_mx.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
             ax_mx.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mx.grid(True, color='gray', alpha=0.25, linestyle='--')
             
-            mesh_lon, mesh_lat = np.meshgrid(st.session_state.eje_lons_t3, st.session_state.eje_lats_t3)
             mapa_maximos = ax_mx.pcolormesh(mesh_lon, mesh_lat, st.session_state.matriz_maximos, 
                                             transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d)
-            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO (TECU)', weight='bold')
+            fig_max.colorbar(mapa_maximos, ax=ax_mx, orientation='vertical', pad=0.02, aspect=35).set_label('PICO MÁXIMO (TECU)', weight='bold')
+            
+            # Título auditado sin pérdidas de información
+            plt.title(f"Picos Máximos Absolutos — Rango: {fecha_inicial.strftime('%d/%m/%Y')} al {fecha_final_calc.strftime('%d/%m/%Y')} ({hora_fija_sel:02d}:00 UTC)", fontsize=11, weight='bold', pad=12)
+            
+            plt.tight_layout()
             st.pyplot(fig_max)
             plt.close(fig_max)
 
@@ -783,7 +815,6 @@ with tab3:
                 lat_c, lon_c, name_c = lat_c_man, lon_c_man, f"Punto ({lat_c_man:.1f}, {lon_c_man:.1f})"
 
             if st.button("➕ Añadir Localidad al Gráfico", key="btn_t3d"):
-                # Validamos que la coordenada esté dentro del mapa activo
                 lim_lat_min = -90 if es_ionex else LAT_MIN
                 lim_lat_max = 90 if es_ionex else LAT_MAX
                 lim_lon_min = -180 if es_ionex else LON_MIN
@@ -798,7 +829,6 @@ with tab3:
             if st.session_state.ciudades_lista:
                 fig_lineas, ax_lineas = plt.subplots(figsize=(12, 5))
                 for ciudad_obj in st.session_state.ciudades_lista:
-                    # Búsqueda dinámica del índice según la malla activa
                     idx_lat = (np.abs(st.session_state.eje_lats_t3 - ciudad_obj['lat'])).argmin()
                     idx_lon = (np.abs(st.session_state.eje_lons_t3 - ciudad_obj['lon'])).argmin()
                     ax_lineas.plot(range(len(st.session_state.etiquetas_fechas_reales)), 
@@ -807,7 +837,11 @@ with tab3:
                 ax_lineas.set_ylim(vmin_d, vmax_d)
                 ax_lineas.set_xticks(range(len(st.session_state.etiquetas_fechas_reales)))
                 ax_lineas.set_xticklabels(st.session_state.etiquetas_fechas_reales, rotation=25)
+                
+                # CORRECCIÓN DE TÍTULO: Identificando rango y hora fija del análisis de líneas
+                ax_lineas.set_title(f"Evolución de Intensidad TECU a las {hora_fija_sel:02d}:00 UTC (Periodo: {fecha_inicial.strftime('%d/%m')} al {fecha_final_calc.strftime('%d/%m')})", fontsize=11, weight='bold', pad=10)
                 ax_lineas.legend(loc="upper right")
+                
                 st.pyplot(fig_lineas)
                 plt.close(fig_lineas)
 # =====================================================================
