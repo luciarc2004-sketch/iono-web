@@ -758,7 +758,7 @@ with tab3:
                                                  transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_d, vmax=vmax_d, zorder=2)
                 
                 # CORRECCIÓN DE TÍTULO: Cada casilla lleva su día y hora exacta
-                ax_sub.set_title(f"📅 {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=9, weight='bold')
+                ax_sub.set_title(f" {st.session_state.etiquetas_fechas_reales[f]} UTC", fontsize=9, weight='bold')
             
             # Limpiamos los cuadrantes sobrantes de la malla si el número de días no es múltiplo exacto
             for j in range(num_plots, len(axes)):
@@ -1024,7 +1024,7 @@ with tab3:
                 ultimo_mapeo_h = ax_sub.pcolormesh(mesh_lon, mesh_lat, st.session_state.h_historial_vtec_3d[f, :, :], 
                                                    transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_h, vmax=vmax_h, zorder=2)
                 
-                ax_sub.set_title(f"⏱️ {f:02d}:00 UTC", fontsize=9, weight='bold')
+                ax_sub.set_title(f" {f:02d}:00 UTC", fontsize=9, weight='bold')
             
             # Barra de colores unificada debajo del mosaico completo
             fig_mosaic_h.colorbar(ultimo_mapeo_h, ax=axes_h.tolist(), orientation='horizontal', shrink=0.5, pad=0.04).set_label('Escala de Densidad VTEC (TECU)', weight='bold', fontsize=10)
@@ -1321,7 +1321,7 @@ with tab3:
                     
                     # Etiqueta con el día y hora exactos
                     if f_real < len(st.session_state.dc_etiquetas_reales):
-                        ax_sub.set_title(f"⏱️ {st.session_state.dc_etiquetas_reales[f_real]}", fontsize=9, weight='bold')
+                        ax_sub.set_title(f" {st.session_state.dc_etiquetas_reales[f_real]}", fontsize=9, weight='bold')
                 
                 # Ocultar paneles vacíos si no es múltiplo de 6
                 for j in range(num_plots_dc, len(axes_dc)):
