@@ -1109,180 +1109,266 @@ with tab3:
                 st.pyplot(fig_lineas_h)
                 plt.close(fig_lineas_h)
 # =====================================================================
-    # BLOQUE 3: DÍAS COMPLETOS (RANGO CONTINUO CON REPRODUCTOR MULTIMEDIA REAL)
+    # BLOQUE 3: DÍAS COMPLETOS (MOSAICO CONTINUO DUAL DLR/IONEX)
     # =====================================================================
     elif modo_evolucion == "Días Completos (Rango Continuo)":
         st.subheader("📆 Análisis de Evolución Temporal Continua (24h x N Días)")
         
+        # 1. Variables dinámicas de memoria
         if 'dc_historial_vtec_3d' not in st.session_state:
             st.session_state.dc_historial_vtec_3d = None
             st.session_state.dc_etiquetas_reales = []
             st.session_state.dc_matriz_maximos = None
             st.session_state.dc_ciudades_lista = []
+            st.session_state.dc_fuente_activa = "DLR"
+            st.session_state.dc_eje_lats = None
+            st.session_state.dc_eje_lons = None
 
-        # Variables persistentes exclusivas para el control del reproductor de vídeo
-        if 'dc_frame_actual' not in st.session_state:
-            st.session_state.dc_frame_actual = 0
-        if 'dc_reproduciendo' not in st.session_state:
-            st.session_state.dc_reproduciendo = False
-
+        # 2. Interfaz de Configuración
+        fuente_datos_dc = st.radio("📡 Fuente de Datos Continua:", ["🇪🇺 DLR (Regional Europa)", "🌍 IONEX (Planetario Global)"], horizontal=True, key="radio_fuente_dc")
+        
         col_dc1, col_dc2 = st.columns(2)
         dc_fecha_inicial = col_dc1.date_input("Fecha Inicial del rango:", datetime.date(2026, 1, 20), key="dc_fecha_ini")
         dc_num_dias = col_dc2.slider("Número de días completos a encadenar:", 2, 7, 3, key="dc_num_dias_slider")
 
         total_horas_rango = dc_num_dias * 24
 
-        if st.button("🚀 Procesar Días Completos (Línea Continua)", key="btn_ev_dc"):
-            with st.spinner(f"Descargando y encadenando las {total_horas_rango} horas consecutivas del rango..."):
-                headers = {"User-Agent": "Mozilla/5.0"}
+        # 3. Motor Dual de Extracción Masiva
+        if st.button("🚀 Procesar Serie Temporal Continua", key="btn_ev_dc"):
+            with st.spinner(f"Descargando y encadenando {total_horas_rango} horas consecutivas desde {fuente_datos_dc}..."):
                 dc_temp_etiquetas = []
-                dc_temp_3d = np.zeros((total_horas_rango, 43, 81))
                 dc_exito_total = True
                 contador_hora_global = 0
 
-                for d in range(dc_num_dias):
-                    fecha_actual = datetime.datetime(dc_fecha_inicial.year, dc_fecha_inicial.month, dc_fecha_inicial.day) + datetime.timedelta(days=d)
+                # --- RUTA A: DLR (EUROPA) ---
+                if "DLR" in fuente_datos_dc:
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    dc_temp_3d = np.zeros((total_horas_rango, 43, 81))
                     
-                    for h in range(24):
-                        link_exitoso = False
-                        for m in MINUTOS_CONTIGUOS_GLOBAL:
-                            url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, h, m)
-                            try:
-                                response = requests.get(url_intento, headers=headers, timeout=4)
-                                if response.status_code == 200:
-                                    data = response.json()
-                                    link_exitoso = True
-                                    break
-                            except Exception: pass
+                    for d in range(dc_num_dias):
+                        fecha_actual = dc_fecha_inicial + datetime.timedelta(days=d)
+                        for h in range(24):
+                            link_exitoso = False
+                            for m in [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]:
+                                url_intento = generar_enlace_dlr_seguro(fecha_actual.year, fecha_actual.month, fecha_actual.day, h, m)
+                                try:
+                                    response = requests.get(url_intento, headers=headers, timeout=4)
+                                    if response.status_code == 200:
+                                        data = response.json()
+                                        link_exitoso = True
+                                        break
+                                except Exception: pass
 
-                        if not link_exitoso:
-                            st.error(f"❌ Corte en la cadena de datos. Sin registros el día {fecha_actual.strftime('%d/%m')} a las {h:02d}:00 UTC.")
-                            dc_exito_total = False
-                            break
+                            if not link_exitoso:
+                                st.error(f"❌ Corte en los datos. Sin registros en DLR el {fecha_actual.strftime('%d/%m')} a las {h:02d}:00 UTC.")
+                                dc_exito_total = False
+                                break
 
-                        vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
-                        dc_temp_3d[contador_hora_global, :, :] = np.array(vtec_values_list).reshape(43, 81)
-                        dc_temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} - {h:02d}h")
-                        contador_hora_global += 1
+                            vtec_values_list = [f['properties']['vtec_assimilated_tecu'] for f in data['data']['grid']['features']]
+                            dc_temp_3d[contador_hora_global, :, :] = np.array(vtec_values_list).reshape(43, 81)
+                            dc_temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} - {h:02d}h")
+                            contador_hora_global += 1
+                        if not dc_exito_total: break
                         
-                    if not dc_exito_total: break
+                    if dc_exito_total:
+                        st.session_state.dc_fuente_activa = "DLR"
+                        st.session_state.dc_eje_lats = LATS_EUROPA 
+                        st.session_state.dc_eje_lons = LONS_EUROPA
 
+                # --- RUTA B: IONEX (GLOBAL) ---
+                else:
+                    lats_i = np.arange(87.5, -87.6, -2.5)
+                    lons_i = np.arange(-180.0, 180.1, 5.0)
+                    dc_temp_3d = np.zeros((total_horas_rango, len(lats_i), len(lons_i)))
+                    
+                    for d in range(dc_num_dias):
+                        fecha_actual = dc_fecha_inicial + datetime.timedelta(days=d)
+                        year, doy = fecha_actual.strftime("%Y"), fecha_actual.strftime("%j")
+                        url_ionex = f"http://ftp.aiub.unibe.ch/CODE/{year}/COD0OPSFIN_{year}{doy}0000_01D_01H_GIM.INX.gz"
+                        
+                        tmp_gz, tmp_txt = "tmp_dc.INX.gz", "tmp_dc.inx"
+                        try:
+                            urllib.request.urlretrieve(url_ionex, tmp_gz)
+                            with gzip.open(tmp_gz, 'rb') as f_in, open(tmp_txt, 'wb') as f_out:
+                                shutil.copyfileobj(f_in, f_out)
+                                
+                            exponente = -1
+                            hora_actual = None
+                            leyendo_tec = False
+                            mapas_procesados = 0
+                            
+                            with open(tmp_txt, 'r') as f:
+                                lineas = f.readlines()
+                                
+                            for i, linea in enumerate(lineas):
+                                if "EXPONENT" in linea:
+                                    nums = re.findall(r'-?\d+', linea)
+                                    if nums: exponente = int(nums[0])
+                                    
+                                if "START OF TEC MAP" in linea: leyendo_tec = True
+                                elif "END OF TEC MAP" in linea: leyendo_tec = False
+                                    
+                                if "EPOCH OF CURRENT MAP" in linea and leyendo_tec:
+                                    hora_actual = int(linea.split()[3])
+                                    lat_idx = 0 
+                                    
+                                if leyendo_tec and hora_actual is not None and hora_actual < 24 and "LAT/LON1/LON2/DLON/H" in linea:
+                                    valores = []
+                                    offset = 1
+                                    while len(valores) < 73 and i + offset < len(lineas):
+                                        lin_d = lineas[i+offset].rstrip('\n')
+                                        for j in range(0, len(lin_d), 5):
+                                            val = lin_d[j:j+5].strip()
+                                            if val: valores.append(int(val))
+                                        offset += 1
+                                    
+                                    # Insertamos en el índice global continuo
+                                    idx_global = (d * 24) + hora_actual
+                                    dc_temp_3d[idx_global, (len(lats_i)-1) - lat_idx, :] = np.array(valores) * (10**exponente)
+                                    lat_idx += 1
+                                    
+                                    # Si terminamos de leer un mapa completo (todas las latitudes)
+                                    if lat_idx == len(lats_i):
+                                        dc_temp_etiquetas.append(f"{fecha_actual.strftime('%d/%m')} - {hora_actual:02d}h")
+                                        contador_hora_global += 1
+                                        mapas_procesados += 1
+                                        
+                            os.remove(tmp_gz)
+                            os.remove(tmp_txt)
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error descargando IONEX del {fecha_actual.strftime('%d/%m/%Y')}: {e}")
+                            dc_exito_total = False
+                            if os.path.exists(tmp_gz): os.remove(tmp_gz)
+                            if os.path.exists(tmp_txt): os.remove(tmp_txt)
+                            break
+                            
+                    if dc_exito_total:
+                        st.session_state.dc_fuente_activa = "IONEX"
+                        st.session_state.dc_eje_lats = lats_i[::-1] 
+                        st.session_state.dc_eje_lons = lons_i
+
+                # --- GUARDADO EN MEMORIA ---
                 if dc_exito_total:
+                    # Filtramos por si hubiese etiquetas duplicadas o desordenadas en IONEX
+                    if len(dc_temp_etiquetas) > total_horas_rango: dc_temp_etiquetas = dc_temp_etiquetas[:total_horas_rango]
+                    
                     st.session_state.dc_historial_vtec_3d = dc_temp_3d
                     st.session_state.dc_etiquetas_reales = dc_temp_etiquetas
                     st.session_state.dc_matriz_maximos = np.max(dc_temp_3d, axis=0)
-                    st.session_state.dc_frame_actual = 0  # Resetear al cargar nuevos datos
-                    st.success(f"📊 Línea temporal unificada de {total_horas_rango} puntos reales completada.")
+                    st.session_state.dc_ciudades_lista = []
+                    st.success(f"📊 Línea temporal unificada de {total_horas_rango} mapas completada ({st.session_state.dc_fuente_activa}).")
 
+        # 4. Bloque de Visualización Dinámica (Mosaico Masivo)
         if st.session_state.dc_historial_vtec_3d is not None:
-            ajuste_local_dc = st.toggle("🔍 Optimizar rango vertical al Máx/Mín local de esta serie masiva", key="toggle_dc_ejes")
-            vmin_dc, vmax_dc = (max(0.0, float(np.floor(np.min(st.session_state.dc_historial_vtec_3d) - 2))), float(np.ceil(np.max(st.session_state.dc_historial_vtec_3d) + 2))) if ajuste_local_dc else (VMIN_TECU_FIJO, VMAX_TECU_FIJO)
+            es_ionex_dc = st.session_state.dc_fuente_activa == "IONEX"
             
-            # =====================================================================
-            # 🎬 REPRODUCTOR MULTIMEDIA AVANZADO (PRO)
-            # =====================================================================
             st.divider()
-            st.subheader("🎬 Consola de Reproducción Dinámica Hacia Adelante/Atrás")
+            col_cfg1, col_cfg2 = st.columns(2)
+            ajuste_local_dc = col_cfg1.toggle("🔍 Optimizar rango vertical al Máx/Mín local de esta serie masiva", key="toggle_dc_ejes")
+            salto_horas = col_cfg2.selectbox("⏱️ Resolución del Mosaico (Evita saturar la pantalla):", [1, 2, 3, 4, 6], index=2, format_func=lambda x: f"Mostrar 1 frame cada {x} horas", key="sel_salto_dc")
             
-            max_frames = len(st.session_state.dc_etiquetas_reales)
-
-            # BARRA DE TIEMPO INTERACTIVA: Moverla actualiza el frame inmediatamente sin reiniciar nada
-            frame_seleccionado = st.slider(
-                "🎞️ Línea de Tiempo (Arrastra para buscar un frame específico):", 
-                min_value=0, 
-                max_value=max_frames - 1, 
-                value=st.session_state.dc_frame_actual,
-                key="slider_tiempo_dc"
-            )
-            st.session_state.dc_frame_actual = frame_seleccionado
-
-            # FILA DE BOTONES DE CONTROL DE REPRODUCCIÓN (Fusión de diseño Pro)
-            c_ctrl1, c_ctrl2, c_ctrl3, c_ctrl4, c_ctrl5, c_ctrl6 = st.columns(6)
-            
-            with c_ctrl1:
-                if st.button("⏮️ Inicio", use_container_width=True, key="btn_pro_inicio"):
-                    st.session_state.dc_frame_actual = 0
-                    st.session_state.dc_reproduciendo = False
-                    st.rerun()
-                    
-            with c_ctrl2:
-                if st.button("◀️ Paso Atrás", use_container_width=True, key="btn_pro_atras"):
-                    st.session_state.dc_frame_actual = max(0, st.session_state.dc_frame_actual - 1)
-                    st.session_state.dc_reproduciendo = False
-                    st.rerun()
-
-            with c_ctrl3:
-                if st.button("⏸️ Pausar", use_container_width=True, key="btn_pro_pausa"):
-                    st.session_state.dc_reproduciendo = False
-
-            with c_ctrl4:
-                if st.button("▶️ Play Auto", use_container_width=True, key="btn_pro_play"):
-                    st.session_state.dc_reproduciendo = True
-
-            with c_ctrl5:
-                if st.button("▶️ Paso Avance", use_container_width=True, key="btn_pro_adelante"):
-                    st.session_state.dc_frame_actual = min(max_frames - 1, st.session_state.dc_frame_actual + 1)
-                    st.session_state.dc_reproduciendo = False
-                    st.rerun()
-
-            with c_ctrl6:
-                if st.button("⏭️ Final", use_container_width=True, key="btn_pro_final"):
-                    st.session_state.dc_frame_actual = max_frames - 1
-                    st.session_state.dc_reproduciendo = False
-                    st.rerun()
-
-            # LÓGICA DE RENDERIZADO DEL MAPA ACTUAL SELECCIONADO
-            contenedor_mapa_cambiante = st.empty()
-
-            # Función helper interna para no repetir código de pintado
-            def dibujar_frame_especifico(idx_frame):
-                fig_a = plt.figure(figsize=(11, 5.5), dpi=100)
-                ax_a = plt.axes(projection=ccrs.PlateCarree())
-                ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                
-                mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_historial_vtec_3d[idx_frame, :, :], 
-                                      transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
-                plt.colorbar(mapa_a, ax=ax_a, orientation='horizontal', pad=0.08, shrink=0.7).set_label('VTEC (TECU)', weight='bold')
-                ax_a.set_title(f"FRAME ACTUAL: [{idx_frame + 1}/{max_frames}] | RESTRICCIÓN: {st.session_state.dc_etiquetas_reales[idx_frame]} UTC", fontsize=10, weight='bold')
-                return fig_a
-
-            # Modo Play automático: corre en secuencia desde donde esté el slider hasta el final
-            if st.session_state.dc_reproduciendo:
-                while st.session_state.dc_frame_actual < max_frames:
-                    fig_run = dibujar_frame_especifico(st.session_state.dc_frame_actual)
-                    contenedor_mapa_cambiante.pyplot(fig_run)
-                    plt.close(fig_run)
-                    time.sleep(0.50)  # Tus 0.5 segundos estrictos por frame
-                    st.session_state.dc_frame_actual += 1
-                # Al terminar la película, reseteamos el estado de reproducción
-                st.session_state.dc_reproduciendo = False
-                st.session_state.dc_frame_actual = max_frames - 1
-                st.rerun()
+            # --- CORRECCIÓN DE SATURACIÓN ---
+            if ajuste_local_dc:
+                vmin_dc = max(0.0, float(np.floor(np.min(st.session_state.dc_historial_vtec_3d))))
+                vmax_dc = float(np.ceil(np.max(st.session_state.dc_historial_vtec_3d)))
             else:
-                # Si está pausado o el usuario mueve el slider de forma manual, dibuja instantáneamente ese frame estático
-                fig_static = dibujar_frame_especifico(st.session_state.dc_frame_actual)
-                contenedor_mapa_cambiante.pyplot(fig_static)
-                plt.close(fig_static)
+                vmin_dc = 0.0
+                vmax_dc = 120.0 if es_ionex_dc else 60.0 
 
             # =====================================================================
-            # 1. MAPA DE MÁXIMOS ABSOLUTOS
+            # 🧩 MOSAICO CONTINUO
+            # =====================================================================
+            st.subheader("🧩 Mosaico de Evolución Continua Multi-Día")
+            
+            # Seleccionamos los frames a dibujar según el salto elegido
+            indices_frames = list(range(0, total_horas_rango, salto_horas))
+            num_plots_dc = len(indices_frames)
+            
+            ncols_dc = 6
+            nrows_dc = int(np.ceil(num_plots_dc / ncols_dc))
+            
+            w_sub_dc = 3.5 if es_ionex_dc else 2.8
+            h_sub_dc = 2.0 if es_ionex_dc else 2.5
+            
+            with st.spinner("Renderizando mosaico masivo (puede tardar unos segundos)..."):
+                fig_mosaic_dc, axes_dc = plt.subplots(nrows_dc, ncols_dc, figsize=(w_sub_dc * ncols_dc, h_sub_dc * nrows_dc), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+                axes_dc = np.array([axes_dc]).flatten() if num_plots_dc == 1 else np.array(axes_dc).flatten()
+                
+                mesh_lon, mesh_lat = np.meshgrid(st.session_state.dc_eje_lons, st.session_state.dc_eje_lats)
+                ultimo_mapeo_dc = None
+                
+                for i_plot, f_real in enumerate(indices_frames):
+                    ax_sub = axes_dc[i_plot]
+                    
+                    if es_ionex_dc:
+                        ax_sub.set_global()
+                        ax_sub.set_xticks([-180, 0, 180], crs=ccrs.PlateCarree())
+                        ax_sub.set_yticks([-90, 0, 90], crs=ccrs.PlateCarree())
+                    else:
+                        ax_sub.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                        ax_sub.set_xticks([float(LON_MIN), (float(LON_MIN)+float(LON_MAX))/2, float(LON_MAX)], crs=ccrs.PlateCarree())
+                        ax_sub.set_yticks([float(LAT_MIN), float(LAT_MAX)], crs=ccrs.PlateCarree())
+                    
+                    ax_sub.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                    ax_sub.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                    ax_sub.add_feature(cfeature.COASTLINE, edgecolor='#333333', linewidth=0.7, zorder=3)
+                    ax_sub.grid(True, color='gray', alpha=0.2, linestyle='--')
+                    ax_sub.tick_params(labelsize=6)
+                    
+                    ultimo_mapeo_dc = ax_sub.pcolormesh(mesh_lon, mesh_lat, st.session_state.dc_historial_vtec_3d[f_real, :, :], 
+                                                       transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc, zorder=2)
+                    
+                    # Etiqueta con el día y hora exactos
+                    if f_real < len(st.session_state.dc_etiquetas_reales):
+                        ax_sub.set_title(f"⏱️ {st.session_state.dc_etiquetas_reales[f_real]}", fontsize=9, weight='bold')
+                
+                # Ocultar paneles vacíos si no es múltiplo de 6
+                for j in range(num_plots_dc, len(axes_dc)):
+                    fig_mosaic_dc.delaxes(axes_dc[j])
+                
+                # Barra global
+                if ultimo_mapeo_dc:
+                    fig_mosaic_dc.colorbar(ultimo_mapeo_dc, ax=axes_dc.tolist(), orientation='horizontal', shrink=0.5, pad=0.04).set_label('Escala de Densidad VTEC (TECU)', weight='bold', fontsize=10)
+                
+                st.pyplot(fig_mosaic_dc)
+                plt.close(fig_mosaic_dc)
+
+            # =====================================================================
+            # 📌 MAPA DE MÁXIMOS ABSOLUTOS
             # =====================================================================
             st.subheader("📌 Mapa Fijo de Máximos Absolutos del Rango Completo")
-            fig_max_dc, ax_mxdc = plt.subplots(figsize=(10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
-            ax_mxdc.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            fig_max_dc, ax_mxdc = plt.subplots(figsize=(14, 7) if es_ionex_dc else (10, 6), subplot_kw={'projection': ccrs.PlateCarree()}, dpi=100)
+            
+            if es_ionex_dc:
+                ax_mxdc.set_global()
+                ax_mxdc.set_xticks([-180, -120, -60, 0, 60, 120, 180], crs=ccrs.PlateCarree())
+                ax_mxdc.set_yticks([-90, -60, -30, 0, 30, 60, 90], crs=ccrs.PlateCarree())
+            else:
+                ax_mxdc.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                ax_mxdc.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+                ax_mxdc.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+            
             ax_mxdc.add_feature(cfeature.LAND, facecolor='#f6f6f6')
             ax_mxdc.add_feature(cfeature.OCEAN, facecolor='#e3f2fd')
-            ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1)
+            ax_mxdc.add_feature(cfeature.COASTLINE, edgecolor='#222222')
+            ax_mxdc.grid(True, color='gray', alpha=0.3, linestyle='--')
             
-            mapa_maximos_dc = ax_mxdc.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.dc_matriz_maximos, transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
-            fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal', pad=0.08, shrink=0.7).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
-            st.pyplot(fig_max_dc); plt.close(fig_max_dc)
+            mapa_maximos_dc = ax_mxdc.pcolormesh(mesh_lon, mesh_lat, st.session_state.dc_matriz_maximos, 
+                                                 transform=ccrs.PlateCarree(), cmap='jet', alpha=0.85, shading='gouraud', vmin=vmin_dc, vmax=vmax_dc)
+            
+            fig_max_dc.colorbar(mapa_maximos_dc, ax=ax_mxdc, orientation='horizontal' if not es_ionex_dc else 'vertical', 
+                                pad=0.08 if not es_ionex_dc else 0.02, shrink=0.7 if not es_ionex_dc else 1.0, aspect=40).set_label('PICO MÁXIMO DEL PERIODO (TECU)', weight='bold')
+            
+            fecha_final_rango = dc_fecha_inicial + datetime.timedelta(days=dc_num_dias - 1)
+            plt.title(f"Valores Máximos Acumulados — Del {dc_fecha_inicial.strftime('%d/%m/%Y')} al {fecha_final_rango.strftime('%d/%m/%Y')}", fontsize=11, weight='bold', pad=12)
+            
+            if es_ionex_dc: plt.tight_layout()
+            st.pyplot(fig_max_dc)
+            plt.close(fig_max_dc)
 
             # =====================================================================
-            # 3. GRÁFICA DE LOCALIZACIÓN CONTINUA (CIUDAD / COORDENADAS)
+            # 📊 GRÁFICA DE LOCALIZACIÓN CONTINUA
             # =====================================================================
             st.subheader("📊 Gráfica Continua del Ciclo de Días Completos Encadenados")
             tipo_busqueda_t3dc = st.radio("Formato de inserción de localidad (Modo Continuo):", ["Por Nombre de Ciudad", "Por Coordenadas de Estación"], horizontal=True, key="radio_t3dc")
@@ -1293,28 +1379,43 @@ with tab3:
                 if nueva_ciudad_dc: lat_dcl, lon_dcl, name_dcl = geocodificar_localidad(nueva_ciudad_dc)
             else:
                 col_ldc1, col_ldc2 = st.columns(2)
-                lat_dc_man = col_ldc1.number_input("Latitud nodo de análisis:", min_value=float(LAT_MIN), max_value=float(LAT_MAX), value=40.41, step=0.1, key="num_lat_t3dc")
-                lon_dc_man = col_ldc2.number_input("Longitud nodo de análisis:", min_value=float(LON_MIN), max_value=float(LON_MAX), value=-3.70, step=0.1, key="num_lon_t3dc")
+                lat_dc_man = col_ldc1.number_input("Latitud nodo de análisis:", min_value=-90.0, max_value=90.0, value=40.41, step=0.1, key="num_lat_t3dc")
+                lon_dc_man = col_ldc2.number_input("Longitud nodo de análisis:", min_value=-180.0, max_value=180.0, value=-3.70, step=0.1, key="num_lon_t3dc")
                 lat_dcl, lon_dcl, name_dcl = lat_dc_man, lon_dc_man, f"Nodo ({lat_dc_man:.1f}, {lon_dc_man:.1f})"
 
             if st.button("➕ Añadir Localidad al Gráfico Continuo", key="btn_t3dc"):
-                if lat_dcl is not None and lon_dcl is not None and (LAT_MIN <= lat_dcl <= LAT_MAX) and (LON_MIN <= lon_dcl <= LON_MAX):
-                    if name_dcl not in [c['name'] for c in st.session_state.dc_ciudades_lista]: st.session_state.dc_ciudades_lista.append({'name': name_dcl, 'lat': lat_dcl, 'lon': lon_dcl})
+                lim_lat_min = -90 if es_ionex_dc else LAT_MIN
+                lim_lat_max = 90 if es_ionex_dc else LAT_MAX
+                lim_lon_min = -180 if es_ionex_dc else LON_MIN
+                lim_lon_max = 180 if es_ionex_dc else LON_MAX
+                
+                if lat_dcl is not None and lon_dcl is not None and (lim_lat_min <= lat_dcl <= lim_lat_max) and (lim_lon_min <= lon_dcl <= lim_lon_max):
+                    if name_dcl not in [c['name'] for c in st.session_state.dc_ciudades_lista]: 
+                        st.session_state.dc_ciudades_lista.append({'name': name_dcl, 'lat': lat_dcl, 'lon': lon_dcl})
+                else:
+                    st.warning("Esa localidad queda fuera del mapa actualmente seleccionado.")
             
             if st.session_state.dc_ciudades_lista:
                 fig_lineas_dc, ax_lineas_dc = plt.subplots(figsize=(15, 5.5))
                 for ciudad_obj in st.session_state.dc_ciudades_lista:
-                    idx_lat = (np.abs(LATS_EUROPA - ciudad_obj['lat'])).argmin()
-                    idx_lon = (np.abs(LONS_EUROPA - ciudad_obj['lon'])).argmin()
-                    ax_lineas_dc.plot(range(len(st.session_state.dc_etiquetas_reales)), st.session_state.dc_historial_vtec_3d[:, idx_lat, idx_lon], linewidth=2, label=ciudad_obj['name'])
+                    idx_lat = (np.abs(st.session_state.dc_eje_lats - ciudad_obj['lat'])).argmin()
+                    idx_lon = (np.abs(st.session_state.dc_eje_lons - ciudad_obj['lon'])).argmin()
+                    ax_lineas_dc.plot(range(total_horas_rango), st.session_state.dc_historial_vtec_3d[:, idx_lat, idx_lon], linewidth=2.5, label=ciudad_obj['name'])
                 
                 ax_lineas_dc.grid(True, linestyle='--')
                 ax_lineas_dc.set_ylim(vmin_dc, vmax_dc)
-                ax_lineas_dc.set_xticks(range(len(st.session_state.dc_etiquetas_reales)))
+                ax_lineas_dc.set_xlim(0, total_horas_rango - 1)
+                ax_lineas_dc.set_xticks(range(total_horas_rango))
+                
+                # Etiquetamos el eje X solo cada X horas (basado en el salto elegido) para no emborronar el texto
+                ax_lineas_dc.set_xticklabels([st.session_state.dc_etiquetas_reales[k] if k % salto_horas == 0 else "" for k in range(total_horas_rango)], rotation=45, fontsize=8)
+                
                 ax_lineas_dc.set_ylabel("TECU", weight='bold')
-                ax_lineas_dc.set_xticklabels([st.session_state.dc_etiquetas_reales[k] if k % 6 == 0 else "" for k in range(len(st.session_state.dc_etiquetas_reales))], rotation=45, fontsize=8)
+                ax_lineas_dc.set_title(f"Evolución Ininterrumpida de Intensidad TECU ({total_horas_rango} horas encadenadas)", fontsize=12, weight='bold', pad=10)
                 ax_lineas_dc.legend(loc="upper right")
-                st.pyplot(fig_lineas_dc); plt.close(fig_lineas_dc)
+                
+                st.pyplot(fig_lineas_dc)
+                plt.close(fig_lineas_dc)
 # =====================================================================
 # PESTAÑA 4: PRONÓSTICO (MODO DUAL: HISTÓRICO / TIEMPO REAL OPERATIVO)
 # =====================================================================
