@@ -1730,9 +1730,8 @@ with tab4:
                 st.markdown(f"* ⏱️ **Pronóstico para las {f_fut.strftime('%H:%M')} UTC** del {f_fut.strftime('%d/%m')}: `{st.session_state.p4_vector_futuro_calc[idx]:.3f} TECU`")
 
 
-
 # =====================================================================
-# PESTAÑA 5: DESVIACIONES DEL MODELO 
+# PESTAÑA 5: DESVIACIONES DEL MODELO E INCERTIDUMBRE (PANEL CONTINUO)
 # =====================================================================
 with tab5:
     st.title("📉 Desviaciones e Incertidumbre")
@@ -1798,7 +1797,7 @@ with tab5:
                     exito_total_p5 = False
                     break
 
-                real_list, rms_list, model_list = [], [], []
+                real_list, rms_list, model_list = [], [] , []
                 if 'data' in data_instante and 'grid' in data_instante['data'] and 'features' in data_instante['data']['grid']:
                     for feature in data_instante['data']['grid']['features']:
                         if 'properties' in feature:
@@ -1828,19 +1827,12 @@ with tab5:
                 st.session_state.p5_fecha_info = f"{p5_fecha.strftime('%d/%m/%Y')} - {p5_constelacion}"
                 st.success("📊 Repositorio multi-variable cargado correctamente en memoria.")
 
-    # MENÚ SECUNDARIO INTERNO PARA SEPARAR LOS PILARES SOLICITADOS
+    # PANEL CONTINUO DE AUDITORÍA AVANZADA
     if st.session_state.p5_historial_real_3d is not None:
         st.divider()
         st.subheader("🎯 Panel de Control de Auditoría Avanzada")
         
-        sub_seccion_p5 = st.radio(
-            "Selecciona el pilar de estudio científico:",
-            ["Pilar 1: Evolución de la Desviación del Modelo (Residuos Teóricos)", 
-             "Pilar 2: Incertidumbre del Dato (Margen de Confianza RMS)"],
-            horizontal=True, key="radio_sub_p5"
-        )
-        
-        # Sistema dual alternativo de entrada de localización
+        # Sistema de entrada de localización para control
         st.markdown("#### 📍 Punto de Control e Intermediación")
         p5_tipo_pos = st.radio("Método de entrada de localización para control:", ["Buscar por Nombre", "Introducir Coordenadas Manuales"], horizontal=True, key="p5_pos_radio")
         
@@ -1866,130 +1858,181 @@ with tab5:
                 val_dev_p = st.session_state.p5_historial_desviacion_3d[p5_hora_vista, idx_lat, idx_lon]
                 val_rms_p = st.session_state.p5_historial_rms_3d[p5_hora_vista, idx_lat, idx_lon]
                 
-                c_1, c_2, c_3 = st.columns(3)
-                if "Pilar 1" in sub_seccion_p5:
-                    c_1.metric(label="🛰️ Retraso Real", value=f"{val_real_p:.3f} m")
-                    c_2.metric(label="🔮 Retraso Teórico", value=f"{val_model_p:.3f} m")
-                    c_3.metric(label="📉 Desviación Residual", value=f"{val_dev_p:+.3f} m", delta=f"{val_dev_p:.3f} m", delta_color="inverse")
-                else:
-                    c_1.metric(label="🛡️ Incertidumbre de Confianza", value=f"± {val_rms_p:.3f} m")
-                    c_2.metric(label="📍 Ubicación de Control", value=label_v)
-                    c_3.info(f"**Coordenadas:**\nLat {lat_v:.2f}°N | Lon {lon_v:.2f}°E")
-            else: st.error("Fuera de la malla de Europa.")
+                c_1, c_2, c_3, c_4 = st.columns(4)
+                c_1.metric(label="🛰️ Retraso Real", value=f"{val_real_p:.3f} m")
+                c_2.metric(label="🔮 Retraso Teórico", value=f"{val_model_p:.3f} m")
+                c_3.metric(label="📉 Desviación", value=f"{val_dev_p:+.3f} m", delta=f"{val_dev_p:.3f} m", delta_color="inverse")
+                c_4.metric(label="🛡️ Incertidumbre", value=f"± {val_rms_p:.3f} m")
+            else: 
+                st.error("Fuera de la malla de Europa.")
 
         st.divider()
         p5_toggle_color = st.toggle("🔍 Optimizar rango cromático al Máx/Mín de este mapa específico", key="toggle_p5_scale")
 
         # =====================================================================
-        # DESPLIEGUE DEL PILAR 1: EVOLUCIÓN DE LA DESVIACIÓN
+        # SECCIÓN 1: EVOLUCIÓN DE LA DESVIACIÓN
         # =====================================================================
-        if "Pilar 1" in sub_seccion_p5:
-            st.write(f"### 📉 Análisis de Residuos: Modelo Teórico menos Valor Real")
-            
-            if p5_toggle_color:
-                lim_abs = float(np.max(np.abs(st.session_state.p5_historial_desviacion_3d[p5_hora_vista])))
-                vmin_p5, vmax_p5 = -lim_abs, lim_abs
-                str_status = "Ajuste Simétrico Local"
-            else:
-                lim_abs_global = float(np.ceil(np.max(np.abs(st.session_state.p5_historial_desviacion_3d))))
-                vmin_p5, vmax_p5 = -lim_abs_global, lim_abs_global
-                str_status = "Rango Universal Centrado"
-
-            fig_p5_d = plt.figure(figsize=(11, 6), dpi=100)
-            ax_p5_d = plt.axes(projection=ccrs.PlateCarree())
-            ax_p5_d.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_p5_d.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-            ax_p5_d.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-            ax_p5_d.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-            
-            # --- BYPASS A SHAPELY GRIDLINES ---
-            ax_p5_d.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-            ax_p5_d.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-            ax_p5_d.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
-            ax_p5_d.yaxis.set_major_formatter(LATITUDE_FORMATTER)
-            ax_p5_d.grid(True, color='gray', alpha=0.3, linestyle='--')
-            # ----------------------------------
-
-            mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
-                                        transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
-            
-            plt.colorbar(mapa_d, ax=ax_p5_d, orientation='vertical', pad=0.02, aspect=35).set_label(f'DESVIACIÓN DEL MODELO DE FONDO (METROS) [{str_status}]', weight='bold')
-            ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC\n[Blanco = Coincidencia | Rojo = Sobreestima | Azul = Subestima]", fontsize=10, weight='bold')
-            
-            plt.tight_layout()
-            st.pyplot(fig_p5_d)
-            plt.close(fig_p5_d)
-
-            # Reproductor dinámico
-            st.subheader("🎬 Reproductor Dinámico de la Desviación (24 Horas)")
-            if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
-                contenedor_p5_anim = st.empty()
-                for f in range(24):
-                    fig_a = plt.figure(figsize=(11, 6), dpi=100)
-                    ax_a = plt.axes(projection=ccrs.PlateCarree())
-                    ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-                    ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
-                    ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-                    ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-                    
-                    # --- BYPASS A SHAPELY GRIDLINES ---
-                    ax_a.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-                    ax_a.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-                    ax_a.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
-                    ax_a.yaxis.set_major_formatter(LATITUDE_FORMATTER)
-                    ax_a.grid(True, color='gray', alpha=0.3, linestyle='--')
-                    # ----------------------------------
-                    
-                    mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
-                                             transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
-                    
-                    plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('DESVIACIÓN EN METROS', weight='bold')
-                    ax_a.set_title(f"FRAME HORARIO DE CONTROL: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=10, weight='bold')
-                    
-                    plt.tight_layout()
-                    contenedor_p5_anim.pyplot(fig_a)
-                    plt.close(fig_a)
-                    time.sleep(0.4)
-                    
-        # =====================================================================
-        # DESPLIEGUE DEL PILAR 2: INCERTIDUMBRE DEL DATO
-        # =====================================================================
+        st.write(f"### 1️⃣ Análisis de Residuos: Modelo Teórico menos Valor Real")
+        
+        if p5_toggle_color:
+            lim_abs = float(np.max(np.abs(st.session_state.p5_historial_desviacion_3d[p5_hora_vista])))
+            vmin_p5, vmax_p5 = -lim_abs, lim_abs
+            str_status = "Ajuste Simétrico Local"
         else:
-            st.write(f"### 🛡️ Tolerancia Geodésica: Análisis de Confianza de Medida (RMS)")
-            
-            if p5_toggle_color:
-                vmin_rms, vmax_rms = float(np.min(st.session_state.p5_historial_rms_3d[p5_hora_vista])), float(np.max(st.session_state.p5_historial_rms_3d[p5_hora_vista]))
-                str_status_r = "Rango Optimizado Local"
-            else:
-                vmin_rms, vmax_rms = 0.0, float(np.ceil(np.max(st.session_state.p5_historial_rms_3d)))
-                str_status_r = "Escala Universal Fija"
+            lim_abs_global = float(np.ceil(np.max(np.abs(st.session_state.p5_historial_desviacion_3d))))
+            vmin_p5, vmax_p5 = -lim_abs_global, lim_abs_global
+            str_status = "Rango Universal Centrado"
 
-            fig_p5_r = plt.figure(figsize=(11, 6), dpi=100)
-            ax_p5_r = plt.axes(projection=ccrs.PlateCarree())
-            ax_p5_r.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
-            ax_p5_r.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
-            ax_p5_r.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
-            ax_p5_r.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
-            
-            # --- BYPASS A SHAPELY GRIDLINES ---
-            ax_p5_r.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
-            ax_p5_r.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
-            ax_p5_r.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
-            ax_p5_r.yaxis.set_major_formatter(LATITUDE_FORMATTER)
-            ax_p5_r.grid(True, color='gray', alpha=0.3, linestyle='--')
-            # ----------------------------------
+        fig_p5_d = plt.figure(figsize=(11, 6), dpi=100)
+        ax_p5_d = plt.axes(projection=ccrs.PlateCarree())
+        ax_p5_d.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+        ax_p5_d.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+        ax_p5_d.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+        ax_p5_d.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+        
+        ax_p5_d.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+        ax_p5_d.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+        ax_p5_d.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+        ax_p5_d.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+        ax_p5_d.grid(True, color='gray', alpha=0.3, linestyle='--')
 
-            mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
-                                        transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
-            
-            plt.colorbar(mapa_r, ax=ax_p5_r, orientation='vertical', pad=0.02, aspect=35).set_label(f'INCERTIDUMBRE DEL DATO (METROS RMS) [{str_status_r}]', weight='bold')
-            ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC\n[Muestra la calidad métrica intrínseca de los datos asimilados por los satélites]", fontsize=10, weight='bold')
-            
-            plt.tight_layout()
-            st.pyplot(fig_p5_r)
-            plt.close(fig_p5_r)
+        mapa_d = ax_p5_d.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[p5_hora_vista], 
+                                    transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+        
+        plt.colorbar(mapa_d, ax=ax_p5_d, orientation='vertical', pad=0.02, aspect=35).set_label(f'DESVIACIÓN (METROS) [{str_status}]', weight='bold')
+        ax_p5_d.set_title(f"MAPA ESTÁTICO DE RESIDUOS A LAS {p5_hora_vista:02d}:00 UTC", fontsize=11, weight='bold', pad=10)
+        
+        plt.tight_layout()
+        st.pyplot(fig_p5_d)
+        plt.close(fig_p5_d)
 
+        # Reproductor dinámico de desviación
+        st.write("🎬 **Reproductor Dinámico de la Desviación (24 Horas)**")
+        if st.button("▶️ Reproducir Evolución de Errores", key="btn_play_p5_dev"):
+            contenedor_p5_anim = st.empty()
+            for f in range(24):
+                fig_a = plt.figure(figsize=(11, 6), dpi=100)
+                ax_a = plt.axes(projection=ccrs.PlateCarree())
+                ax_a.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+                ax_a.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+                ax_a.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+                ax_a.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+                
+                ax_a.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+                ax_a.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+                ax_a.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+                ax_a.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+                ax_a.grid(True, color='gray', alpha=0.3, linestyle='--')
+                
+                mapa_a = ax_a.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_desviacion_3d[f, :, :], 
+                                         transform=ccrs.PlateCarree(), cmap='seismic', alpha=0.85, shading='gouraud', vmin=vmin_p5, vmax=vmax_p5, zorder=2)
+                
+                plt.colorbar(mapa_a, ax=ax_a, orientation='vertical', pad=0.02, aspect=35).set_label('DESVIACIÓN EN METROS', weight='bold')
+                ax_a.set_title(f"FRAME HORARIO: {st.session_state.p5_etiquetas_fechas_reales[f]} UTC", fontsize=11, weight='bold', pad=10)
+                
+                plt.tight_layout()
+                contenedor_p5_anim.pyplot(fig_a)
+                plt.close(fig_a)
+                time.sleep(0.4)
 
+        st.divider()
+        # =====================================================================
+        # SECCIÓN 2: INCERTIDUMBRE DEL DATO (RMS)
+        # =====================================================================
+        st.write(f"### 2️⃣ Tolerancia Geodésica: Análisis de Confianza de Medida (RMS)")
+        
+        if p5_toggle_color:
+            vmin_rms, vmax_rms = float(np.min(st.session_state.p5_historial_rms_3d[p5_hora_vista])), float(np.max(st.session_state.p5_historial_rms_3d[p5_hora_vista]))
+            str_status_r = "Rango Optimizado Local"
+        else:
+            vmin_rms, vmax_rms = 0.0, float(np.ceil(np.max(st.session_state.p5_historial_rms_3d)))
+            str_status_r = "Escala Universal Fija"
+
+        fig_p5_r = plt.figure(figsize=(11, 6), dpi=100)
+        ax_p5_r = plt.axes(projection=ccrs.PlateCarree())
+        ax_p5_r.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+        ax_p5_r.add_feature(cfeature.LAND, facecolor='#f5f5f5', zorder=1)
+        ax_p5_r.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+        ax_p5_r.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=1.1, zorder=3)
+        
+        ax_p5_r.set_xticks([-30, -20, -10, 0, 10, 20, 30, 40, 50], crs=ccrs.PlateCarree())
+        ax_p5_r.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+        ax_p5_r.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+        ax_p5_r.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+        ax_p5_r.grid(True, color='gray', alpha=0.3, linestyle='--')
+
+        mapa_r = ax_p5_r.pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, st.session_state.p5_historial_rms_3d[p5_hora_vista], 
+                                    transform=ccrs.PlateCarree(), cmap='YlOrRd', alpha=0.85, shading='gouraud', vmin=vmin_rms, vmax=vmax_rms, zorder=2)
+        
+        plt.colorbar(mapa_r, ax=ax_p5_r, orientation='vertical', pad=0.02, aspect=35).set_label(f'INCERTIDUMBRE (METROS RMS) [{str_status_r}]', weight='bold')
+        ax_p5_r.set_title(f"MAPA DE MARGEN DE TOLERANCIA RMS A LAS {p5_hora_vista:02d}:00 UTC", fontsize=11, weight='bold', pad=10)
+        
+        plt.tight_layout()
+        st.pyplot(fig_p5_r)
+        plt.close(fig_p5_r)
+
+        st.divider()
+        # =====================================================================
+        # SECCIÓN 3: MOSAICO COMPARATIVO 2x2 MULTI-CONSTELACIÓN
+        # =====================================================================
+        st.write(f"### 3️⃣ Comparativa Física Multi-Constelación GNSS a las {p5_hora_vista:02d}:00 UTC")
+        
+        # Recuperamos el TECU puro a partir del mapa asimilado almacenado (invirtiendo la conversión anterior)
+        tecu_puro_base = st.session_state.p5_historial_real_3d[p5_hora_vista] / FACTOR_METROS_P5
+        
+        # Calculamos el retraso en metros específico para cada constelación
+        freq_gps = 1575.42e6
+        freq_glo = 1602.00e6
+        freq_bds = 1561.10e6
+        
+        delay_gps = tecu_puro_base * (40.3 / (freq_gps ** 2)) * 1e16
+        delay_gal = delay_gps # Comparten frecuencia L1/E1
+        delay_glo = tecu_puro_base * (40.3 / (freq_glo ** 2)) * 1e16
+        delay_bds = tecu_puro_base * (40.3 / (freq_bds ** 2)) * 1e16
+
+        # Calculamos las diferencias exactas
+        diff_gal = delay_gal - delay_gps
+        diff_bds = delay_bds - delay_gps
+        diff_glo = delay_glo - delay_gps
+
+        fig_2x2, axes_2x2 = plt.subplots(2, 2, figsize=(16, 9), dpi=100, subplot_kw={'projection': ccrs.PlateCarree()})
+        axes_2x2 = axes_2x2.flatten()
+
+        for ax in axes_2x2:
+            ax.set_extent([LON_MIN, LON_MAX, LAT_MIN, LAT_MAX], crs=ccrs.PlateCarree())
+            ax.add_feature(cfeature.LAND, facecolor='#f6f6f6', zorder=1)
+            ax.add_feature(cfeature.OCEAN, facecolor='#e3f2fd', zorder=1)
+            ax.add_feature(cfeature.COASTLINE, edgecolor='#222222', linewidth=0.8, zorder=3)
+            ax.set_xticks([-30, -15, 0, 15, 30, 45], crs=ccrs.PlateCarree())
+            ax.set_yticks([30, 40, 50, 60, 70], crs=ccrs.PlateCarree())
+            ax.xaxis.set_major_formatter(LONGITUDE_FORMATTER)
+            ax.yaxis.set_major_formatter(LATITUDE_FORMATTER)
+            ax.grid(True, color='gray', alpha=0.3, linestyle='--')
+
+        # 1. Mapa Base: GPS
+        im_gps = axes_2x2[0].pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, delay_gps, cmap='jet', transform=ccrs.PlateCarree(), zorder=2)
+        plt.colorbar(im_gps, ax=axes_2x2[0], orientation='vertical', pad=0.02, aspect=35).set_label('Metros de Retraso', weight='bold')
+        axes_2x2[0].set_title("1. Error Absoluto GPS (L1)", fontsize=11, weight='bold')
+
+        # 2. Mapa: Galileo (Suele ser idéntico a GPS, centramos en 0)
+        im_gal = axes_2x2[1].pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, diff_gal, cmap='seismic', transform=ccrs.PlateCarree(), vmin=-0.1, vmax=0.1, zorder=2)
+        plt.colorbar(im_gal, ax=axes_2x2[1], orientation='vertical', pad=0.02, aspect=35).set_label('Desviación (Metros)', weight='bold')
+        axes_2x2[1].set_title("2. Diferencia Galileo menos GPS", fontsize=11, weight='bold')
+
+        # 3. Mapa: BeiDou (Sufre más retraso por frecuencia baja)
+        im_bds = axes_2x2[2].pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, diff_bds, cmap='Reds', transform=ccrs.PlateCarree(), zorder=2)
+        plt.colorbar(im_bds, ax=axes_2x2[2], orientation='vertical', pad=0.02, aspect=35).set_label('Retraso Extra (Metros)', weight='bold')
+        axes_2x2[2].set_title("3. Penalización BeiDou frente a GPS", fontsize=11, weight='bold')
+
+        # 4. Mapa: GLONASS (Sufre menos retraso por frecuencia alta)
+        # vmax=0 asegura que los números negativos (menor retraso) destaquen en azul
+        im_glo = axes_2x2[3].pcolormesh(GRID_LON_EUR, GRID_LAT_GRID, diff_glo, cmap='Blues_r', transform=ccrs.PlateCarree(), vmax=0, zorder=2)
+        plt.colorbar(im_glo, ax=axes_2x2[3], orientation='vertical', pad=0.02, aspect=35).set_label('Reducción de Error (Metros)', weight='bold')
+        axes_2x2[3].set_title("4. Ventaja GLONASS frente a GPS", fontsize=11, weight='bold')
+
+        plt.tight_layout()
+        st.pyplot(fig_2x2)
+        plt.close(fig_2x2)
 
 # =====================================================================
 # PESTAÑA 6: COMENTARIOS Y FEEDBACK 
