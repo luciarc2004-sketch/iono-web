@@ -2239,19 +2239,19 @@ with tab_aviacion:
             tab_gps, tab_glo, tab_gal = st.tabs(["🇺🇸 Constelación GPS", "🇷🇺 Constelación GLONASS", "🇪🇺 Constelación Galileo"])
             
             with tab_gps:
-                st.info("Obtén los datos oficiales aquí: [CelesTrak GPS TLE](https://celestrak.org/NORAD/elements/gps-ops.txt)")
+                st.info("Obtén los datos oficiales aquí: [CelesTrak GPS TLE](https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=tle)")
                 texto_gps = st.text_area("Pega aquí el bloque completo de texto TLE para GPS:", height=200, key="area_gps")
                 if st.button("🚀 Procesar Datos GPS y Generar Mapa", key="btn_gps_man"):
                     procesar_texto_tle_con_mapa("GPS", texto_gps, observador, lat_target, lon_target)
 
             with tab_glo:
-                st.info("Obtén los datos oficiales aquí: [CelesTrak GLONASS TLE](https://celestrak.org/NORAD/elements/glo-ops.txt)")
+                st.info("Obtén los datos oficiales aquí: [CelesTrak GLONASS TLE](https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=tle)")
                 texto_glo = st.text_area("Pega aquí el bloque completo de texto TLE para GLONASS:", height=200, key="area_glo")
                 if st.button("🚀 Procesar Datos GLONASS y Generar Mapa", key="btn_glo_man"):
                     procesar_texto_tle_con_mapa("GLONASS", texto_glo, observador, lat_target, lon_target)
 
             with tab_gal:
-                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/galileo.txt)")
+                st.info("Obtén los datos oficiales aquí: [CelesTrak Galileo TLE](https://celestrak.org/NORAD/elements/gp.php?GROUP=beidou&FORMAT=tle)")
                 texto_gal = st.text_area("Pega aquí el bloque completo de texto TLE para Galileo:", height=200, key="area_gal")
                 if st.button("🚀 Procesar Datos Galileo y Generar Mapa", key="btn_gal_man"):
                     procesar_texto_tle_con_mapa("Galileo", texto_gal, observador, lat_target, lon_target)
