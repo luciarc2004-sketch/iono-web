@@ -383,10 +383,12 @@ with tab1:
             descarga_ok = False
             for u in urls:
                 try:
-                    response = requests.get(u, headers=headers, timeout=10, stream=True)
+                    # Uso correcto de requests para archivos binarios (.gz)
+                    response = requests.get(u, headers=headers, stream=True, timeout=10)
                     if response.status_code == 200:
                         with open(tmp_gz, 'wb') as f_out:
-                            shutil.copyfileobj(response.raw, f_out)
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f_out.write(chunk)
                         descarga_ok = True
                         break
                 except:
@@ -445,6 +447,7 @@ with tab1:
                 return eje_lats, eje_lons, grid_datos
 
             finally:
+                # Limpieza estricta de archivos en el disco del servidor
                 if os.path.exists(tmp_gz): os.remove(tmp_gz)
                 if os.path.exists(tmp_txt): os.remove(tmp_txt)
 
